@@ -485,6 +485,103 @@ def run_acceptance(run: Run, room: dict) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# events
+# --------------------------------------------------------------------------- #
+
+def choice_is_available(run: Run, choice: dict) -> str | None:
+    """Why this choice cannot be taken, or None if it can.
+
+    Event gates are load-bearing: being poor or already carrying a card changes
+    which choices exist for you, which is what stops an event being a free menu.
+    """
+    requires = choice.get("requires") or {}
+    if "card" in requires and requires["card"] not in run.owned_card_ids():
+        card = card_by_id(requires["card"])
+        return f"needs the {card['title'] if card else requires['card']} card"
+    if "focus" in requires and int(run.game.get("focus", 0)) < int(requires["focus"]):
+        return f"needs ◈{requires['focus']} focus"
+    return None
+
+
+def apply_effects(run: Run, effects: list[dict]) -> list[str]:
+    """Apply one choice's effects and describe what happened, in order.
+
+    Every verb here is one `content-schema.md` names. An effect that names an
+    object that does not exist is skipped rather than crashing the room — but
+    `tests/test_run.py` refuses to let such an effect ship in the first place.
+    """
+    log: list[str] = []
+    for effect in effects or []:
+        verb = effect.get("verb")
+
+        if verb == "add_curse":
+            curse = object_by_id("curses", effect.get("id", ""))
+            if curse and curse["id"] not in (run.game.get("curses") or []):
+                run.game.setdefault("curses", []).append(curse["id"])
+                log.append(f"Gained the {curse['name']} curse. {curse['cost']}")
+
+        elif verb == "remove_curse":
+            carried = run.game.get("curses") or []
+            target = effect.get("id")
+            drop = carried[0] if target == "any" and carried else (
+                target if target in carried else None)
+            if drop:
+                carried.remove(drop)
+                removed = object_by_id("curses", drop)
+                log.append(f"Shed the {removed['name'] if removed else drop} curse.")
+
+        elif verb == "gain_relic":
+            relic = object_by_id("relics", effect.get("id", ""))
+            if relic and relic["id"] not in (run.deck.get("relics") or []):
+                run.deck.setdefault("relics", []).append(relic["id"])
+                log.append(f"Gained the {relic['name']} relic.")
+
+        elif verb == "gain_card":
+            pool = run.game.setdefault("hand_pool", run.owned_card_ids())
+            rarity = effect.get("rarity")
+            rng = mapgen.floor_rng(mapgen.act_seed(run.seed, run.act) + 4,
+                                   int(run.deck.get("floor", 0)))
+            options = [c for c in content("cards")["cards"]
+                       if c["id"] not in pool and (not rarity or c["rarity"] == rarity)]
+            if options:
+                pick = options[rng.randrange(len(options))]
+                pool.append(pick["id"])
+                log.append(f"Gained {pick['title']}.")
+
+        elif verb == "lose_card":
+            pool = run.game.setdefault("hand_pool", run.owned_card_ids())
+            if effect.get("id") in pool:
+                pool.remove(effect["id"])
+                log.append(f"Lost {effect['id']}.")
+
+        elif verb == "gain_focus":
+            amount = int(effect.get("amount", 0))
+            run.game["focus"] = int(run.game.get("focus", 0)) + amount
+            log.append(f"Gained ◈{amount} focus.")
+
+        elif verb == "spend_focus":
+            amount = int(effect.get("amount", 0))
+            run.game["focus"] = max(0, int(run.game.get("focus", 0)) - amount)
+            log.append(f"Spent ◈{amount} focus.")
+
+        elif verb == "require_card":
+            card = card_by_id(effect.get("id", ""))
+            log.append(f"Spent {card['title'] if card else effect.get('id')}.")
+
+        elif verb == "bump_prior":
+            priors = run.game.setdefault("prior_bump", {})
+            room = effect.get("room", "")
+            priors[room] = round(priors.get(room, 0.0) + float(effect.get("delta", 0)), 4)
+            direction = "rises" if float(effect.get("delta", 0)) > 0 else "falls"
+            log.append(f"{room.capitalize()} pressure {direction} for the act.")
+
+        elif verb == "log_room":
+            log.append("Logged and left.")
+
+    return log
+
+
+# --------------------------------------------------------------------------- #
 # rewards
 # --------------------------------------------------------------------------- #
 
@@ -773,6 +870,27 @@ def cmd_acceptance(run: Run, args: argparse.Namespace) -> dict:
 def cmd_clear(run: Run, args: argparse.Namespace) -> dict:
     room = require_room(run)
     node_id = room["id"]
+    resolution: list[str] = []
+
+    # An event is cleared by *choosing*, so the choice has to arrive with the
+    # clear or its consequences never happen.
+    if room.get("kind") == "event":
+        event = room.get("event") or {}
+        choices = event.get("choices") or []
+        if not args.choice:
+            raise RunError(
+                "choice_required",
+                f"{event.get('title', 'This event')} needs a choice: "
+                + ", ".join(c["id"] for c in choices),
+                choices=[{"id": c["id"], "label": c["label"]} for c in choices],
+            )
+        choice = next((c for c in choices if c["id"] == args.choice), None)
+        if choice is None:
+            raise RunError("no_such_choice", f"{args.choice!r} is not a choice here.")
+        blocked = choice_is_available(run, choice)
+        if blocked:
+            raise RunError("choice_locked", f"{choice['label']} {blocked}.")
+        resolution = apply_effects(run, choice.get("effects") or [])
 
     if "clear_at" in room and room.get("progress", 0) < room["clear_at"] and not args.force:
         raise RunError(
@@ -815,8 +933,12 @@ def cmd_clear(run: Run, args: argparse.Namespace) -> dict:
 
     run.save()
     return {"ok": True, "reward": reward, "act_cleared": finished_act,
+            "resolution": resolution,
             "badges": run.game.get("badges") if finished_act else [],
-            "state": serialize_state(run)}
+            # The map ships with every verb that can move you. Returning state
+            # alone left the client rendering stale reachability from before the
+            # room was cleared.
+            "map": serialize_map(run), "state": serialize_state(run)}
 
 
 def cmd_flee(run: Run, args: argparse.Namespace) -> dict:
@@ -829,7 +951,7 @@ def cmd_flee(run: Run, args: argparse.Namespace) -> dict:
     run.save()
     return {"ok": True, "fled": room.get("name"),
             "curse_gained": "hesitation" if args.no_notes else None,
-            "state": serialize_state(run)}
+            "map": serialize_map(run), "state": serialize_state(run)}
 
 
 def cmd_reward(run: Run, args: argparse.Namespace) -> dict:
@@ -846,7 +968,7 @@ def cmd_reward(run: Run, args: argparse.Namespace) -> dict:
         run.deck["game"] = run.game
         run.save()
         return {"ok": True, "skipped": True, "focus_gained": payout,
-                "state": serialize_state(run)}
+                "map": serialize_map(run), "state": serialize_state(run)}
 
     if not args.take:
         raise RunError("bad_args", "Pass --take <id> or --skip.")
@@ -882,7 +1004,8 @@ def cmd_reward(run: Run, args: argparse.Namespace) -> dict:
     reloaded["relics"] = run.deck.get("relics") or []
     run.deck = reloaded
     run.save()
-    return {"ok": True, "taken": offer, "state": serialize_state(run)}
+    return {"ok": True, "taken": offer, "map": serialize_map(run),
+            "state": serialize_state(run)}
 
 
 def cmd_campfire(run: Run, args: argparse.Namespace) -> dict:
@@ -925,7 +1048,8 @@ def cmd_campfire(run: Run, args: argparse.Namespace) -> dict:
     reloaded["game"] = run.game
     run.deck = reloaded
     run.save()
-    return {"ok": True, "detail": detail, "state": serialize_state(run)}
+    return {"ok": True, "detail": detail, "map": serialize_map(run),
+            "state": serialize_state(run)}
 
 
 def cmd_shop(run: Run, args: argparse.Namespace) -> dict:
@@ -1019,6 +1143,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_clear = sub.add_parser("clear", help="finish the room")
     p_clear.add_argument("--force", action="store_true", help="clear without meeting the target")
+    p_clear.add_argument("--choice", help="event choice id (required in an event room)")
 
     p_flee = sub.add_parser("flee", help="abandon the room")
     p_flee.add_argument("--no-notes", action="store_true",

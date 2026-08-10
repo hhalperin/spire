@@ -456,7 +456,10 @@ button:focus-visible, [tabindex]:focus-visible {
     var(--stone-800);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  /* Per-axis, not the shorthand. `overflow: hidden` here would reset the
+     overflow-y above and silently defeat the scroll-to-your-position code —
+     the climb would render as a clipped column with no way to reach the rest. */
+  overflow-x: hidden;
 }
 
 .map-canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -1756,18 +1759,27 @@ function screenEvent() {
   wrap.appendChild(el('h1', 'hero-title', event.title || room.name));
   wrap.appendChild(el('p', 'sub', event.body || ''));
 
+  const owned = new Set((ui.state.pool || []).map((c) => c.id));
+  const focus = ui.state.focus || 0;
+
   const panel = el('div', 'panel');
   (event.choices || []).forEach((choice) => {
+    const needs = choice.requires || {};
+    const locked = (needs.card && !owned.has(needs.card))
+      || (needs.focus !== undefined && focus < needs.focus);
+
     const btn = el('button', `choice${choice.greedy ? ' greedy' : ''}`);
     btn.dataset.action = 'choice';
     btn.dataset.choice = choice.id;
-    btn.appendChild(el('div', 'lb', choice.label));
+    if (locked) btn.setAttribute('aria-disabled', 'true');
+    btn.appendChild(el('div', 'lb', choice.label + (locked ? ' \u2014 locked' : '')));
     btn.appendChild(el('div', 'cq', choice.consequence));
     panel.appendChild(btn);
   });
   wrap.appendChild(panel);
   wrap.appendChild(el('p', 'sub',
-    'A room with no checkable acceptance is not a fight, so it is not given an intent.'));
+    'A room with no checkable acceptance is not a fight, so it is not given an intent. '
+    + 'Every choice here spends the floor \u2014 there is no way to look and leave.'));
   return wrap;
 }
 
@@ -2098,11 +2110,19 @@ async function onAction(action, dataset, target) {
     case 'leave-shop':
       await callTool('spire_clear_or_flee', { action: 'clear' });
       break;
-    case 'choice':
-      // Event effects are resolved by the engine on clear; the choice is logged
-      // and the floor is spent either way.
-      await callTool('spire_clear_or_flee', { action: 'clear' });
+    case 'choice': {
+      // The choice IS the clear for an event room — its effects only run if the
+      // id travels with it.
+      const result = await callTool('spire_clear_or_flee', {
+        action: 'clear', choice: dataset.choice,
+      });
+      if (result && result.ok) {
+        const said = (result.resolution || []).join(' ');
+        if (said) toast(said);
+        bridge.updateModelContext(`Event resolved: ${dataset.choice}. ${said}`.trim());
+      }
       break;
+    }
     case 'screen-deck': ui.screen = 'deck'; render(); break;
     case 'screen-badges':
       await callTool('spire_badges', {});

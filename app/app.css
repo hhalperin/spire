@@ -406,7 +406,10 @@ button:focus-visible, [tabindex]:focus-visible {
     var(--stone-800);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  /* Per-axis, not the shorthand. `overflow: hidden` here would reset the
+     overflow-y above and silently defeat the scroll-to-your-position code —
+     the climb would render as a clipped column with no way to reach the rest. */
+  overflow-x: hidden;
 }
 
 .map-canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; }

@@ -122,6 +122,12 @@ fn build_argv(spec: &tools::ToolSpec, args: &Value) -> Vec<String> {
         if action == "flee" && args.get("no_notes") == Some(&Value::Bool(true)) {
             argv.push("--no-notes".to_string());
         }
+        if action == "clear" {
+            if let Some(choice) = args.get("choice").and_then(Value::as_str) {
+                argv.push("--choice".to_string());
+                argv.push(choice.to_string());
+            }
+        }
         return argv;
     }
     if spec.name == "spire_reward_resolve" && args.get("skip") == Some(&Value::Bool(true)) {
@@ -282,6 +288,17 @@ mod tests {
         assert_eq!(
             build_argv(spec, &json!({"action": "flee", "no_notes": true})),
             vec!["flee", "--no-notes"]
+        );
+    }
+
+    #[test]
+    fn an_event_choice_travels_with_the_clear() {
+        // Without this the consequences in content/events.json never run, and
+        // every "Gain the Bloated Scope curse" the client prints is a lie.
+        let spec = tools::spec("spire_clear_or_flee").unwrap();
+        assert_eq!(
+            build_argv(spec, &json!({"action": "clear", "choice": "accept"})),
+            vec!["clear", "--choice", "accept"]
         );
     }
 

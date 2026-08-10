@@ -38,6 +38,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Event choices applied nothing.** The client rendered every consequence in
+  `content/events.json` — curses, focus, relics — and then cleared the room
+  without sending the choice id, so none of it ran. The choice now *is* the
+  clear: `spire_clear_or_flee` takes a `choice`, `run.py` implements all ten
+  effect verbs, gates refuse when unmet, and the client renders an unmet gate as
+  locked. A test now fails if content ever uses a verb nothing implements.
+- **The map went stale after a room ended.** `clear`, `flee`, `reward` and
+  `campfire` returned state without a map, so the client kept rendering
+  reachability from before the room was cleared. Every verb that can move you now
+  returns a fresh map.
+- **The map could not scroll.** `.map-canvas` set `overflow-y: auto` and then
+  `overflow: hidden` for the border radius; the shorthand won, clipping the
+  climb and defeating the scroll-to-your-position code.
 - A resolved unknown node that became an event rendered the literal string
   `undefined` on the demo map: `GLYPH` had no `event` key while `resolveUnknown`
   defaulted to `"event"`.

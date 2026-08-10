@@ -130,12 +130,20 @@ pub const TOOLS: &[ToolSpec] = &[
     ToolSpec {
         name: "spire_clear_or_flee",
         title: "Clear or flee",
-        description: "Finish the room and roll a reward, or abandon it and lose the streak.",
+        description: "Finish the room and roll a reward, or abandon it and lose the streak. \
+                      Clearing an event room requires the `choice` id — its consequences are real \
+                      and only apply when the choice is named.",
         schema: || {
             json!({
                 "type": "object",
                 "properties": {
                     "action": {"type": "string", "enum": ["clear", "flee"]},
+                    "choice": {
+                        "type": "string",
+                        "description": "Event choice id. Required when clearing an event room — \
+                                        the choice IS the clear, and its effects only run if it \
+                                        travels with it."
+                    },
                     "no_notes": {
                         "type": "boolean",
                         "description": "Flee without writing anything down. Gains the Hesitation curse."

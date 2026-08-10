@@ -630,3 +630,119 @@ def test_cli_reports_failure_as_json_not_a_traceback(tmp_path):
     body = json.loads(proc.stdout)
     assert body["ok"] is False
     assert "Traceback" not in proc.stdout
+
+
+# --------------------------------------------------------------------------- #
+# events — regressions
+# --------------------------------------------------------------------------- #
+
+def open_event_room(repo_path, event_id="one-more-requirement"):
+    """Put the run in a named event room without walking to one."""
+    runner = run.Run(repo_path)
+    event = next(e for e in run.content("events")["events"] if e["id"] == event_id)
+    runner.game["room"] = {
+        "id": "r1c1", "kind": "event", "floor": 2,
+        "name": event["title"], "room_type": "design", "event": event, "intents": [],
+    }
+    runner.game["active_room"] = "r1c1"
+    runner.save()
+    return event
+
+
+def test_clearing_an_event_without_a_choice_is_refused(repo):
+    """The choice IS the clear. Clearing without one would silently drop it."""
+    open_event_room(repo)
+    result = call(repo, "clear")
+    assert result["ok"] is False
+    assert result["error"]["code"] == "choice_required"
+    assert {c["id"] for c in result["error"]["choices"]} == {"accept", "cut", "park"}
+
+
+def test_an_event_choice_actually_applies_its_effects(repo):
+    """The consequence text promised a curse; nothing used to deliver one."""
+    open_event_room(repo)
+    result = call(repo, "clear", "--choice", "accept")
+    assert result["ok"] is True
+
+    state = result["state"]
+    assert [c["id"] for c in state["curses"]] == ["bloated-scope"]
+    assert state["focus"] == 2
+    assert any("Bloated Scope" in line for line in result["resolution"])
+    assert state["active_room"] is None
+
+
+def test_a_gated_choice_is_refused_when_the_gate_is_not_met(repo):
+    open_event_room(repo)
+    result = call(repo, "clear", "--choice", "cut")
+    assert result["ok"] is False
+    assert result["error"]["code"] == "choice_locked"
+    assert "Cut Scope" in result["error"]["message"]
+
+
+def test_a_gated_choice_is_allowed_once_the_gate_is_met(repo):
+    runner = run.Run(repo)
+    runner.game["hand_pool"] = runner.owned_card_ids() + ["c-cut"]
+    runner.save()
+    open_event_room(repo)
+    result = call(repo, "clear", "--choice", "cut")
+    assert result["ok"] is True
+    assert result["state"]["curses"] == []
+
+
+def test_an_unknown_choice_is_refused(repo):
+    open_event_room(repo)
+    result = call(repo, "clear", "--choice", "nope")
+    assert result["ok"] is False
+    assert result["error"]["code"] == "no_such_choice"
+
+
+def test_a_curse_changes_the_rooms_that_follow(repo):
+    """Bloated Scope taxes feature rooms. A curse with no teeth is decoration."""
+    runner = run.Run(repo)
+    runner.game["curses"] = ["bloated-scope"]
+    runner.save()
+    assert run.Run(repo).energy_for("feature") == run.DEFAULT_ENERGY - 1
+    assert run.Run(repo).energy_for("bug") == run.DEFAULT_ENERGY
+
+
+def test_every_effect_verb_in_content_is_implemented():
+    """A verb nobody applies is a promise the UI makes and the engine breaks."""
+    implemented = {
+        "add_curse", "remove_curse", "gain_relic", "gain_card", "lose_card",
+        "gain_focus", "spend_focus", "require_card", "bump_prior", "log_room",
+    }
+    used = {
+        effect["verb"]
+        for event in run.content("events")["events"]
+        for choice in event["choices"]
+        for effect in choice.get("effects", [])
+    }
+    assert used <= implemented, f"unimplemented effect verbs: {used - implemented}"
+
+
+# --------------------------------------------------------------------------- #
+# the map ships with anything that moves you
+# --------------------------------------------------------------------------- #
+
+def test_every_verb_that_moves_you_returns_a_fresh_map(repo):
+    """The client rendered stale reachability when only `state` came back."""
+    first = enter_first_room(repo)["room"]["id"]
+
+    cleared = clear_the_room(repo)
+    assert "map" in cleared, "clear returned no map"
+    assert cleared["map"]["current"] == first
+    assert first in [n["id"] for n in cleared["map"]["nodes"] if n["cleared"]]
+
+    skipped = call(repo, "reward", "--skip")
+    assert "map" in skipped, "reward returned no map"
+
+    legal = {n["id"] for n in skipped["map"]["nodes"] if n["legal"]}
+    assert legal == {n["id"] for n in call(repo, "map")["map"]["nodes"] if n["legal"]}
+    assert first not in legal
+
+
+def test_fleeing_returns_a_fresh_map_too(repo):
+    enter_first_room(repo)
+    fled = call(repo, "flee")
+    assert "map" in fled
+    assert not any(n["cleared"] for n in fled["map"]["nodes"])

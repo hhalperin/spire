@@ -303,6 +303,21 @@ async function walk(page, theme) {
       await shoot(page, tag('shop'));
     } else if (screen === 'event') {
       await expect(page, 'event', { choices: '.choice' });
+      // A gate that is *met* must stay takeable, so compare against the run's
+      // actual state rather than asserting that any gate implies a lock.
+      const expected = await inside(page, () => {
+        const st = window.__spire.ui.state;
+        const owned = new Set((st.pool || []).map((c) => c.id));
+        return (st.room.event.choices || []).filter((c) => {
+          const need = c.requires || {};
+          return (need.card && !owned.has(need.card))
+            || (need.focus !== undefined && (st.focus || 0) < need.focus);
+        }).length;
+      });
+      const shown = await view(page).locator('.choice[aria-disabled="true"]').count();
+      if (shown !== expected) {
+        failures.push(`event: ${expected} choice(s) unaffordable but ${shown} rendered locked`);
+      }
       await shoot(page, tag('event'));
     }
 
@@ -320,7 +335,15 @@ async function walk(page, theme) {
           else await window.__spire.callTool('spire_end_turn', {});
         }
       }
-      await window.__spire.callTool('spire_clear_or_flee', { action: 'clear' });
+      // An event is cleared by choosing. Take the option with no gate on it,
+      // which also exercises the effect pipeline on the way past.
+      const args = { action: 'clear' };
+      if (room.kind === 'event') {
+        const open = (room.event?.choices || []).find((c) => !c.requires)
+          || room.event?.choices?.[0];
+        if (open) args.choice = open.id;
+      }
+      await window.__spire.callTool('spire_clear_or_flee', args);
       if (window.__spire.ui.state.pending_reward) {
         await window.__spire.callTool('spire_reward_resolve', { skip: true });
       }
