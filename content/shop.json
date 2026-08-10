@@ -1,0 +1,54 @@
+{
+  "_comment": "The merchant and the chest. Card rewards are NOT listed here — they are drawn from content/cards.json by rarity, the way Slay the Spire rolls each of the three offers independently, so a fixed offer list can never drift from the card pool. What lives here is priced inventory and the removal ladder. Currency is focus, earned mainly by refusing rewards: sts-fidelity.md calls escalating removal cost the mechanism that gives the deck cap teeth, so it is emulated exactly.",
+
+  "currency": {"id": "focus", "name": "focus", "glyph": "◈"},
+
+  "removal": {
+    "_comment": "75 gold rising 25 every time removal is used anywhere in the run, scaled to our focus economy. Free removal makes bloat costless and the lean-deck tension collapses.",
+    "base": 3,
+    "step": 1
+  },
+
+  "reward_rates": {
+    "_comment": "Rarity roll per offer, with the rare-drought offset from the original: the offset starts negative, climbs each time a common is rolled, and resets when a rare appears. This is why the first reward of an act is effectively never rare.",
+    "normal": {"rare": 0.03, "uncommon": 0.37},
+    "elite": {"rare": 0.10, "uncommon": 0.40},
+    "boss": {"rare": 1.0, "uncommon": 0.0},
+    "offset_start": -0.05,
+    "offset_step": 0.01
+  },
+
+  "wares": [
+    {"id": "w-char", "ref": "c-char", "kind": "card", "price": 2},
+    {"id": "w-ftf", "ref": "c-ftf", "kind": "card", "price": 2},
+    {"id": "w-bisect", "ref": "c-bisect", "kind": "card", "price": 3},
+    {"id": "w-narrow", "ref": "c-narrow", "kind": "card", "price": 4},
+    {"id": "w-coverage", "ref": "coverage-floor", "kind": "relic", "price": 3},
+    {"id": "w-small", "ref": "small-diffs", "kind": "relic", "price": 3},
+    {"id": "w-bowl", "ref": "singing-bowl", "kind": "relic", "price": 5},
+    {"id": "w-profiler", "ref": "profiler", "kind": "potion", "price": 2},
+    {"id": "w-spike", "ref": "spike", "kind": "potion", "price": 2}
+  ],
+
+  "treasure": [
+    {"ref": "small-diffs", "kind": "relic", "weight": 3},
+    {"ref": "coverage-floor", "kind": "relic", "weight": 3},
+    {"ref": "vendored-fork", "kind": "relic", "weight": 1},
+    {"ref": "singing-bowl", "kind": "relic", "weight": 1},
+    {"ref": "bisect", "kind": "potion", "weight": 2},
+    {"ref": "flame-graph", "kind": "potion", "weight": 2},
+    {"ref": "git-blame", "kind": "potion", "weight": 2}
+  ],
+
+  "campfire": {
+    "_comment": "With no HP there is nothing to heal, so Rest and Smith become Smith and Prune. Both still spend the same non-renewable floor, which is the tension that actually mattered. Slay the Spire 2 grew rest sites to nine options (Rest, Smith, Dig, Lift, Cook, Clone, Hatch, Mend, Kindle); we keep two plus a relic-gated third, because options with no cost are not choices.",
+    "options": [
+      {"id": "smith", "name": "Smith", "blurb": "Upgrade one card, permanently.",
+       "disabled_when": "all_upgraded"},
+      {"id": "prune", "name": "Prune", "blurb": "Remove one card from the deck.",
+       "disabled_when": "deck_at_minimum"},
+      {"id": "dig", "name": "Dig", "blurb": "Draw one relic from the chest pool.",
+       "requires_relic": "vendored-fork"}
+    ]
+  }
+}

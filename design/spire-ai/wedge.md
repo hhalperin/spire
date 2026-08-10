@@ -27,7 +27,7 @@ One act, one boss, no marketplace.
 | --- | --- |
 | Content | ~20 cards, ~8 enemies, ~5 events, 1 boss `launch-stub` |
 | Prior | Sensors only (no model) → pressure vector → `?` tables |
-| Client | MCP app: Map, Intent, Combat, Reward, Skip |
+| Client | MCP app: Map, Intent, Combat, Reward, Skip — **shipped (beta)** |
 | Bridge | `play_card` invokes existing dealt skills / shell acceptance |
 | Save | `game` block on `.spire/deck.json` |
 

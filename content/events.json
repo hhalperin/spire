@@ -1,0 +1,118 @@
+{
+  "_comment": "Events are the rooms with no checkable acceptance — a fork, a trade, a call somebody has to make. sts-fidelity.md refuses giving these an intent, because a judgement call has no honest telegraph. Effect verbs follow design/spire-ai/content-schema.md: add_curse, remove_curse, gain_relic, gain_card, lose_card, gain_focus, spend_focus, bump_prior, require_card, log_room. `greedy` marks the choice that trades a real liability for a real gain; the client tints exactly that one with danger and never the others.",
+
+  "events": [
+    {
+      "id": "one-more-requirement",
+      "title": "Just One More Requirement",
+      "pool": "act",
+      "body": "A stakeholder adds a \"tiny\" must-have before ship. Accepting expands this feature room into an elite.",
+      "choices": [
+        {"id": "accept", "label": "Accept scope",
+         "consequence": "Gain the Bloated Scope curse, permanently.",
+         "greedy": true,
+         "effects": [{"verb": "add_curse", "id": "bloated-scope"}, {"verb": "gain_focus", "amount": 2}]},
+        {"id": "cut", "label": "Cut scope",
+         "consequence": "Requires a Cut Scope card.",
+         "requires": {"card": "c-cut"},
+         "effects": [{"verb": "require_card", "id": "c-cut"}, {"verb": "log_room"}]},
+        {"id": "park", "label": "Park in backlog",
+         "consequence": "Log it and leave. No curse.",
+         "effects": [{"verb": "log_room"}]}
+      ]
+    },
+    {
+      "id": "the-rewrite-offer",
+      "title": "The Rewrite Offer",
+      "pool": "act",
+      "body": "Someone has a branch that replaces the whole module. It is cleaner. It is also unreviewed and three weeks old.",
+      "choices": [
+        {"id": "merge", "label": "Merge it",
+         "consequence": "Gain a rare card. Gain the Unreviewed Rewrite curse.",
+         "greedy": true,
+         "effects": [{"verb": "gain_card", "rarity": "rare"}, {"verb": "add_curse", "id": "unreviewed-rewrite"}]},
+        {"id": "harvest", "label": "Harvest one idea",
+         "consequence": "Gain a common card. Close the branch.",
+         "effects": [{"verb": "gain_card", "rarity": "common"}]},
+        {"id": "close", "label": "Close it",
+         "consequence": "Nothing gained, nothing carried.",
+         "effects": [{"verb": "gain_focus", "amount": 1}]}
+      ]
+    },
+    {
+      "id": "the-quiet-dependency",
+      "title": "The Quiet Dependency",
+      "pool": "shrine",
+      "body": "A library you rely on has not shipped in two years. It works. Its issue tracker is closed.",
+      "choices": [
+        {"id": "vendor", "label": "Vendor it",
+         "consequence": "Gain the Vendored Fork relic. You own it now.",
+         "effects": [{"verb": "gain_relic", "id": "vendored-fork"}]},
+        {"id": "wrap", "label": "Wrap it behind one interface",
+         "consequence": "Spend 2 focus. Future swaps cost nothing.",
+         "requires": {"focus": 2},
+         "effects": [{"verb": "spend_focus", "amount": 2}, {"verb": "bump_prior", "room": "refactor", "delta": -0.1}]},
+        {"id": "leave", "label": "Leave it alone",
+         "consequence": "Infra pressure rises for the rest of the act.",
+         "effects": [{"verb": "bump_prior", "room": "infra", "delta": 0.15}]}
+      ]
+    },
+    {
+      "id": "the-metrics-request",
+      "title": "The Metrics Request",
+      "pool": "act",
+      "body": "Leadership wants a dashboard by Friday. Nobody has said which decision it informs.",
+      "choices": [
+        {"id": "build", "label": "Build the dashboard",
+         "consequence": "Gain 3 focus. Gain the Unasked Question curse.",
+         "greedy": true,
+         "effects": [{"verb": "gain_focus", "amount": 3}, {"verb": "add_curse", "id": "unasked-question"}]},
+        {"id": "ask", "label": "Ask what decision it informs",
+         "consequence": "Requires a Record Decision card. Removes a curse if you carry one.",
+         "requires": {"card": "c-decide"},
+         "effects": [{"verb": "require_card", "id": "c-decide"}, {"verb": "remove_curse", "id": "any"}]},
+        {"id": "defer", "label": "Defer one week",
+         "consequence": "Nothing changes. Nothing is lost.",
+         "effects": [{"verb": "log_room"}]}
+      ]
+    },
+    {
+      "id": "the-inherited-suite",
+      "title": "The Inherited Suite",
+      "pool": "shrine",
+      "body": "Four hundred tests. Six minutes. Nobody remembers what eleven of them assert.",
+      "choices": [
+        {"id": "delete", "label": "Delete the eleven",
+         "consequence": "Faster runs. Gain the Deleted Unknowns curse.",
+         "greedy": true,
+         "effects": [{"verb": "add_curse", "id": "deleted-unknowns"}, {"verb": "gain_focus", "amount": 2}]},
+        {"id": "characterize", "label": "Characterize them",
+         "consequence": "Requires a Characterization card. Gain a relic.",
+         "requires": {"card": "c-char"},
+         "effects": [{"verb": "require_card", "id": "c-char"}, {"verb": "gain_relic", "id": "coverage-floor"}]},
+        {"id": "keep", "label": "Keep them and move on",
+         "consequence": "The suite stays slow. Nothing else changes.",
+         "effects": [{"verb": "log_room"}]}
+      ]
+    },
+    {
+      "id": "the-good-enough-fix",
+      "title": "The Good Enough Fix",
+      "pool": "act",
+      "body": "There is a two-line patch that stops the bleeding and a two-day fix that stops the bug.",
+      "choices": [
+        {"id": "patch", "label": "Ship the two-liner",
+         "consequence": "Clear this floor free. Gain the Symptom Patch curse.",
+         "greedy": true,
+         "effects": [{"verb": "add_curse", "id": "symptom-patch"}, {"verb": "log_room"}]},
+        {"id": "fix", "label": "Take the two days",
+         "consequence": "Spend 2 focus. Bug pressure drops for the act.",
+         "requires": {"focus": 2},
+         "effects": [{"verb": "spend_focus", "amount": 2}, {"verb": "bump_prior", "room": "bug", "delta": -0.2}]},
+        {"id": "both", "label": "Patch now, file the real fix",
+         "consequence": "Honest, and it costs a card slot.",
+         "effects": [{"verb": "gain_card", "rarity": "common"}]}
+      ]
+    }
+  ]
+}

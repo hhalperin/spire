@@ -1,0 +1,105 @@
+{
+  "_comment": "The playable card pool. Lifted out of demo.js. `type` is the Slay the Spire card band — attack advances the room, skill buys information or safety, power changes the rest of the run — and it drives the frame colour in the client. `rooms` is the hand filter: a card is legal when the list is empty or contains the active room's type. `agent_skill` names the dealt .claude/skills/<name>/SKILL.md that playing this card actually invokes, which is the reality bridge; a card with no agent_skill is played by hand. `progress` is how much of the room's clear_at it advances — not damage.",
+
+  "rarities": {
+    "_comment": "Rarity encodes how broadly a card applies, not how good it is. ENTITY_STANDARDS.md: a card legal everywhere and always correct is a relic filed wrong.",
+    "common": {"notch": "outline", "max_rooms": 7},
+    "uncommon": {"notch": "filled", "max_rooms": 3},
+    "rare": {"notch": "gold", "max_rooms": 2}
+  },
+
+  "cards": [
+    {
+      "id": "c-ftf", "title": "Failing Test First", "cost": 1, "type": "attack",
+      "body": "Pin the defect with a red test.",
+      "rooms": ["bug", "refactor"], "progress": 2, "rarity": "common",
+      "agent_skill": null
+    },
+    {
+      "id": "c-char", "title": "Characterization", "cost": 1, "type": "attack",
+      "body": "Lock current behaviour in a test.",
+      "rooms": ["bug", "refactor", "feature"], "progress": 1, "rarity": "common",
+      "agent_skill": null
+    },
+    {
+      "id": "c-slice", "title": "Vertical Slice", "cost": 2, "type": "attack",
+      "body": "Ship one thin end-to-end path.",
+      "rooms": ["feature", "design"], "progress": 2, "rarity": "uncommon",
+      "agent_skill": "add-endpoint"
+    },
+    {
+      "id": "c-decide", "title": "Record Decision", "cost": 1, "type": "skill",
+      "body": "Write the call and the spike outcome.",
+      "rooms": ["design", "infra"], "progress": 2, "rarity": "uncommon",
+      "agent_skill": null
+    },
+    {
+      "id": "c-small", "title": "Small Diff", "cost": 1, "type": "skill",
+      "body": "Cut the change to one reviewable unit.",
+      "rooms": [], "progress": 1, "rarity": "common",
+      "agent_skill": null
+    },
+    {
+      "id": "c-runbook", "title": "Runbook", "cost": 1, "type": "attack",
+      "body": "Write down how to operate it.",
+      "rooms": ["infra", "docs"], "progress": 2, "rarity": "common",
+      "agent_skill": null
+    },
+    {
+      "id": "c-tests", "title": "Run Tests", "cost": 0, "type": "skill",
+      "body": "Run the suite and read the first failure, not the last.",
+      "rooms": [], "progress": 1, "rarity": "common",
+      "agent_skill": "run-tests"
+    },
+    {
+      "id": "c-orient", "title": "Orient", "cost": 0, "type": "skill",
+      "body": "Read before writing. Name the files this room touches.",
+      "rooms": ["orient", "design", "docs"], "progress": 1, "rarity": "common",
+      "agent_skill": "orient"
+    },
+    {
+      "id": "c-cut", "title": "Cut Scope", "cost": 1, "type": "skill",
+      "body": "Remove a requirement and say so out loud.",
+      "rooms": ["feature", "design"], "progress": 2, "rarity": "uncommon",
+      "agent_skill": null
+    },
+    {
+      "id": "c-bisect", "title": "Bisect", "cost": 2, "type": "attack",
+      "body": "Find the commit that broke it instead of guessing.",
+      "rooms": ["bug", "infra"], "progress": 3, "rarity": "uncommon",
+      "agent_skill": null
+    },
+    {
+      "id": "c-narrow", "title": "Narrow the Signature", "cost": 2, "type": "attack",
+      "body": "Delete an optional argument and migrate every caller.",
+      "rooms": ["refactor"], "progress": 3, "rarity": "rare",
+      "agent_skill": null
+    },
+    {
+      "id": "c-repro", "title": "Minimal Repro", "cost": 1, "type": "attack",
+      "body": "Shrink the failing case until nothing can be removed.",
+      "rooms": ["bug"], "progress": 2, "rarity": "uncommon",
+      "agent_skill": null
+    },
+    {
+      "id": "c-harness", "title": "Test Harness", "cost": 2, "type": "power",
+      "body": "For the rest of this act, bug rooms need one less progress to clear.",
+      "rooms": ["bug"], "progress": 0, "rarity": "rare",
+      "agent_skill": null
+    },
+    {
+      "id": "c-adr", "title": "Write the ADR", "cost": 2, "type": "attack",
+      "body": "Record the decision, the alternatives, and the date.",
+      "rooms": ["design"], "progress": 3, "rarity": "uncommon",
+      "agent_skill": null
+    },
+    {
+      "id": "c-flee", "title": "Flee with Notes", "cost": 0, "type": "skill",
+      "body": "Leave the room, but write down what you learned first.",
+      "rooms": [], "progress": 0, "rarity": "common",
+      "agent_skill": null
+    }
+  ],
+
+  "starter": ["c-orient", "c-tests", "c-small", "c-char"]
+}

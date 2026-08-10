@@ -1,0 +1,99 @@
+{
+  "_comment": "The run's standing objects, filed by how they are spent — the deciding rule from design/spire-ai/ui/ENTITY_STANDARDS.md. Relic: costs nothing, applies always. Power: costs nothing, fires on an event. Potion: consumed once. Curse: costs you every turn and you did not want it. Lifted out of demo.js, which held them inline.",
+
+  "relics": [
+    {"id": "ruff-strict", "name": "Ruff Strict", "class": "defect",
+     "rule": "Lint and format with Ruff. Resolve every warning before committing."},
+    {"id": "typed-public-api", "name": "Typed Public API", "class": "defect",
+     "rule": "Type-hint public functions and keep the type checker clean."},
+    {"id": "no-mocks-in-prod", "name": "No Mocks In Prod", "class": null,
+     "rule": "Never ship mock, stub, or placeholder data in production paths."},
+    {"id": "stdlib-only", "name": "Stdlib Only", "class": "defect",
+     "rule": "Engine scripts import the standard library and nothing else."},
+    {"id": "coverage-floor", "name": "Coverage Floor", "class": null,
+     "rule": "Never drop coverage silently. A regression needs a written reason."},
+    {"id": "small-diffs", "name": "Small Diffs", "class": null,
+     "rule": "One reviewable unit per room. If it needs two summaries, it is two diffs."},
+    {"id": "vendored-fork", "name": "Vendored Fork", "class": null,
+     "rule": "You own the vendored code. Patches land here, not upstream."},
+    {"id": "singing-bowl", "name": "Singing Bowl", "class": null,
+     "ascension_min": 0,
+     "rule": "Skipping a card reward pays 2 focus instead of nothing.",
+     "effect": {"verb": "skip_payout", "amount": 2}}
+  ],
+
+  "powers": [
+    {"id": "ruff-on-edit", "name": "ruff-on-edit", "event": "PostToolUse",
+     "note": "Lints touched Python after an edit."},
+    {"id": "reward-gate", "name": "reward-gate", "event": "Stop",
+     "note": "Decides whether a room was cleared."},
+    {"id": "status-line", "name": "status-line", "event": "SessionStart",
+     "note": "Prints the run line."},
+    {"id": "ascension-gate", "name": "ascension-gate", "event": "Stop",
+     "note": "Blocks Stop when the tier's gates fail. Only present at A5+."}
+  ],
+
+  "potions": [
+    {"id": "bisect", "name": "Bisect", "kind": "diag", "uses": 1,
+     "spent_on": "Find the commit that broke it."},
+    {"id": "profiler", "name": "Profiler Run", "kind": "perf", "uses": 1,
+     "spent_on": "Name one bottleneck with a number attached."},
+    {"id": "spike", "name": "Timeboxed Spike", "kind": "design", "uses": 1,
+     "spent_on": "Answer one design question and stop."},
+    {"id": "flame-graph", "name": "Flame Graph", "kind": "perf", "uses": 1,
+     "spent_on": "See where the time actually goes."},
+    {"id": "git-blame", "name": "Blame Walk", "kind": "diag", "uses": 1,
+     "spent_on": "Find who knew why, and when."}
+  ],
+
+  "curses": [
+    {"id": "bloated-scope", "name": "Bloated Scope",
+     "cost": "Every feature room costs 1 extra energy.",
+     "why": "Accepted at an event.",
+     "effect": {"verb": "energy_tax", "room": "feature", "amount": 1}},
+    {"id": "deprecated-client", "name": "Deprecated Client",
+     "cost": "Infra rooms may reopen after clearing.",
+     "why": "Carried since the migration.",
+     "effect": {"verb": "reopen_chance", "room": "infra", "amount": 0.25}},
+    {"id": "unreviewed-rewrite", "name": "Unreviewed Rewrite",
+     "cost": "Refactor rooms need one extra progress to clear.",
+     "why": "Merged a three-week branch nobody read.",
+     "effect": {"verb": "clear_at_tax", "room": "refactor", "amount": 1}},
+    {"id": "unasked-question", "name": "The Unasked Question",
+     "cost": "Design rooms cost 1 extra energy.",
+     "why": "Built the dashboard without asking what it decides.",
+     "effect": {"verb": "energy_tax", "room": "design", "amount": 1}},
+    {"id": "deleted-unknowns", "name": "Deleted Unknowns",
+     "cost": "Bug rooms need one extra progress to clear.",
+     "why": "Deleted eleven tests nobody understood.",
+     "effect": {"verb": "clear_at_tax", "room": "bug", "amount": 1}},
+    {"id": "symptom-patch", "name": "Symptom Patch",
+     "cost": "The next bug room this act is an elite.",
+     "why": "Shipped the two-liner.",
+     "effect": {"verb": "escalate_next", "room": "bug"}},
+    {"id": "hesitation", "name": "Hesitation",
+     "cost": "The first card played in a room costs 1 extra energy.",
+     "why": "Fled a room without notes.",
+     "effect": {"verb": "first_card_tax", "amount": 1}}
+  ],
+
+  "badges": {
+    "_comment": "Slay the Spire 2 ships Badges at the end of a run — 'little reminders to let you know what was unique about each run'. Ported, and pointed at the property sts-fidelity.md says most needs a visible payout: refusal. Each badge is a pure function of the save, evaluated when an act is cleared, so nothing here can be granted for free.",
+    "definitions": [
+      {"id": "ascetic", "name": "Ascetic", "test": "skipped >= 5",
+       "blurb": "Skipped {skipped} rewards. Discipline that shows up as a number."},
+      {"id": "lean", "name": "Lean Deck", "test": "cards <= 8",
+       "blurb": "Finished the act on {cards} cards. The cap was never close."},
+      {"id": "elite-hunter", "name": "Elite Hunter", "test": "elites >= 3",
+       "blurb": "Took {elites} elites when the map offered a way around."},
+      {"id": "unbroken", "name": "Unbroken", "test": "streak >= 6",
+       "blurb": "{streak} rooms cleared without fleeing."},
+      {"id": "cartographer", "name": "Cartographer", "test": "annotations >= 5",
+       "blurb": "Marked {annotations} nodes before committing to a route."},
+      {"id": "clean-hands", "name": "Clean Hands", "test": "curses == 0",
+       "blurb": "Cleared the act carrying no curses."},
+      {"id": "ascended", "name": "Ascended", "test": "ascension >= 15",
+       "blurb": "Climbed at A{ascension}, which grants nothing and never has."}
+    ]
+  }
+}
