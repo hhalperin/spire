@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clear: `spire_clear_or_flee` takes a `choice`, `run.py` implements all ten
   effect verbs, gates refuse when unmet, and the client renders an unmet gate as
   locked. A test now fails if content ever uses a verb nothing implements.
+- **A relic gained at an event never persisted.** `deck.py` subcommands rewrite
+  the save from disk, so anything mutated in memory beforehand was discarded by
+  the reload after — the resolution text said you gained the relic and the next
+  load disagreed. Every reload now goes through one method that carries the
+  fields this module owns across, so the whole class is closed rather than the
+  one instance.
 - **The map went stale after a room ended.** `clear`, `flee`, `reward` and
   `campfire` returned state without a map, so the client kept rendering
   reachability from before the room was cleared. Every verb that can move you now

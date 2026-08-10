@@ -746,3 +746,44 @@ def test_fleeing_returns_a_fresh_map_too(repo):
     fled = call(repo, "flee")
     assert "map" in fled
     assert not any(n["cleared"] for n in fled["map"]["nodes"])
+
+
+def test_a_relic_gained_at_an_event_survives_the_save(repo):
+    """deck.py rewrites the file from disk, so an in-memory edit made first is
+    discarded unless the reload carries it back. A relic the resolution text
+    said you gained has to actually be there on the next load."""
+    runner = run.Run(repo)
+    runner.game["hand_pool"] = runner.owned_card_ids() + ["c-char"]
+    runner.save()
+    open_event_room(repo, "the-inherited-suite")
+
+    result = call(repo, "clear", "--choice", "characterize")
+    assert result["ok"] is True
+    assert any("Coverage Floor" in line for line in result["resolution"])
+
+    assert "coverage-floor" in deck.load(repo)["relics"], "the relic did not persist"
+    assert "coverage-floor" in [r["id"] for r in call(repo, "state")["state"]["relics"]]
+
+
+def test_a_relic_bought_at_the_shop_survives_the_save(repo):
+    """Same class of bug, other path."""
+    runner = run.Run(repo)
+    runner.game["room"] = {"id": "r1c2", "kind": "shop", "floor": 2, "name": "The Merchant"}
+    runner.game["active_room"] = "r1c2"
+    runner.game["focus"] = 9
+    runner.save()
+
+    relic_ware = next(w for w in call(repo, "shop")["wares"] if w["kind"] == "relic")
+    assert call(repo, "shop", "--buy", relic_ware["id"])["ok"] is True
+    assert relic_ware["ref"] in deck.load(repo)["relics"]
+
+
+def test_a_relic_taken_from_a_chest_survives_the_save(repo):
+    runner = run.Run(repo)
+    runner.game["pending_reward"] = {
+        "kind": "treasure", "skip_payout": 0,
+        "offers": [{"id": "t", "ref": "small-diffs", "kind": "relic"}],
+    }
+    runner.save()
+    assert call(repo, "reward", "--take", "t")["ok"] is True
+    assert "small-diffs" in deck.load(repo)["relics"]

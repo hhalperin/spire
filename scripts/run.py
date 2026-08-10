@@ -150,6 +150,24 @@ class Run:
     def save(self) -> None:
         deck.save(self.repo, self.deck)
 
+    def reload(self) -> None:
+        """Re-read the save after a `deck.py` call, keeping our in-memory edits.
+
+        `deck.clear_room`, `bump_reward` and `remove_card` each load the file,
+        mutate it and write it back, so anything this module changed in memory
+        beforehand is gone the moment we re-read. That cost a relic gained from
+        an event: `apply_effects` appended it, `clear_room` wrote the old list
+        over the top, and the reload handed back a deck without it — while the
+        resolution text cheerfully said it had been gained.
+
+        Rather than remember to re-apply the right fields at each of the six call
+        sites, the two this module owns are carried across every time.
+        """
+        fresh = deck.load(self.repo)
+        fresh["game"] = self.game
+        fresh["relics"] = self.deck.get("relics") or fresh.get("relics") or []
+        self.deck = fresh
+
     # -- map ---------------------------------------------------------------- #
 
     @property
@@ -834,8 +852,7 @@ def cmd_play(run: Run, args: argparse.Namespace) -> dict:
     # so deck.json's `plays` reflects the game, not just direct invocations.
     if card.get("agent_skill"):
         deck.record_play(run.repo, card["agent_skill"])
-        run.deck = deck.load(run.repo)
-        run.deck["game"] = run.game
+        run.reload()
 
     run.save()
     return {"ok": True, "room": room, "hand": build_hand(run, room),
@@ -906,8 +923,7 @@ def cmd_clear(run: Run, args: argparse.Namespace) -> dict:
     run.game["room"] = None
 
     deck.clear_room(run.repo, room_id=f"floor-{room.get('floor', 0)}")
-    run.deck = deck.load(run.repo)
-    run.deck["game"] = run.game
+    run.reload()
 
     reward = None
     if room.get("kind") in ("monster", "elite", "boss"):
@@ -916,8 +932,7 @@ def cmd_clear(run: Run, args: argparse.Namespace) -> dict:
         if offers:
             reward = {"kind": "card", "offers": offers, "skip_payout": skip_payout(run)}
             deck.bump_reward(run.repo, "offered", len(offers))
-            run.deck = deck.load(run.repo)
-            run.deck["game"] = run.game
+            run.reload()
     elif room.get("kind") == "treasure":
         reward = {"kind": "treasure", "offers": [room.get("offer") or {}], "skip_payout": 0}
 
@@ -964,8 +979,7 @@ def cmd_reward(run: Run, args: argparse.Namespace) -> dict:
         run.game["focus"] = int(run.game.get("focus", 0)) + payout
         run.game["pending_reward"] = None
         deck.bump_reward(run.repo, "skipped", 1)
-        run.deck = deck.load(run.repo)
-        run.deck["game"] = run.game
+        run.reload()
         run.save()
         return {"ok": True, "skipped": True, "focus_gained": payout,
                 "map": serialize_map(run), "state": serialize_state(run)}
@@ -999,10 +1013,7 @@ def cmd_reward(run: Run, args: argparse.Namespace) -> dict:
 
     run.game["pending_reward"] = None
     deck.bump_reward(run.repo, "taken", 1)
-    reloaded = deck.load(run.repo)
-    reloaded["game"] = run.game
-    reloaded["relics"] = run.deck.get("relics") or []
-    run.deck = reloaded
+    run.reload()
     run.save()
     return {"ok": True, "taken": offer, "map": serialize_map(run),
             "state": serialize_state(run)}
@@ -1021,8 +1032,7 @@ def cmd_campfire(run: Run, args: argparse.Namespace) -> dict:
             pool.remove(args.card)
         else:
             deck.remove_card(run.repo, args.card)
-            run.deck = deck.load(run.repo)
-            run.deck["game"] = run.game
+            run.reload()
         run.game["removals"] = int(run.game.get("removals", 0)) + 1
         detail = f"Pruned {args.card}."
     elif args.option == "smith":
@@ -1044,9 +1054,7 @@ def cmd_campfire(run: Run, args: argparse.Namespace) -> dict:
     run.game["room"] = None
     run.game.setdefault("nodes_cleared", []).append(room["id"])
     deck.clear_room(run.repo, room_id=f"floor-{room.get('floor', 0)}")
-    reloaded = deck.load(run.repo)
-    reloaded["game"] = run.game
-    run.deck = reloaded
+    run.reload()
     run.save()
     return {"ok": True, "detail": detail, "map": serialize_map(run),
             "state": serialize_state(run)}
