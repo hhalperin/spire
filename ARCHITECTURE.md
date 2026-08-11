@@ -270,6 +270,24 @@ ticks. That layer exists now, and it is split across three pieces.
         └──────────────────────────────────────────────────────────┘
 ```
 
+The run loop is seven flat modules with `run.py` on top, in the order one
+room's worth of play visits them:
+
+| Module | Owns |
+| :-- | :-- |
+| `gamedata.py` | `content/*.json`, loaded once and looked up by id |
+| `runstate.py` | `RunError` and `Run` — the save, the map, the deck readings |
+| `rooms.py` | building a room from a node, and the hand you face it with |
+| `acceptance.py` | the deterministic sensor a room clears against |
+| `events.py` | event choices: which are available, what taking one does |
+| `rewards.py` | offers, chest draws, the skip payout, removal, badges |
+| `serialize.py` | the payloads the client renders |
+
+Imports run one way, down that list — `tests/test_run_modules.py` fails if a
+sibling ever imports `run.py` back. `run.py` keeps the CLI, the dispatch table
+and the fifteen verbs, and re-exports every name it moved, so `run.<anything>`
+resolves exactly as it did when this was one file.
+
 **`scripts/mapgen.py`** generates the climb: a 15x7 grid walked by six paths,
 quota-bag room assignment, unknown-node resolution with per-outcome ramp
 counters, and per-floor RNG isolation via `seed + floor`. It is pure arithmetic
@@ -283,6 +301,15 @@ the client must never brick on a bad verb. It owns the single-room lock, the
 energy budget, card legality and the reward roll. It carries no HP, no damage
 math and no fabricated intents — see `design/spire-ai/sts-fidelity.md` for why
 each of those is a refusal rather than an omission.
+
+Two readings inside it are worth knowing because they were each got wrong once.
+`Run.hand_size` counts the *playable pool*, not the dealt-skill ledger: those are
+two different lists, and every size rule used to read the one a fresh climb
+leaves empty — so the soft cap never bound and Lean Deck was awarded to everyone.
+And `rewards.remove_from_deck` is the single removal path, because prune and
+trade are the same operation and reached different lists until the cap started
+counting the pool, at which point every trade a normal player could name was
+refused.
 
 **`server/`** is a Rust crate using the official `rmcp` SDK. It declares one
 MCP Apps resource, `ui://spire/app.html` with mimeType

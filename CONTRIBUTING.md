@@ -61,16 +61,58 @@ reward judgment; it must degrade to a clean "skip" if that import fails, never
 raise). Follow the relics this repo deals itself (see `CLAUDE.md`): Ruff-clean,
 typed, no placeholder data.
 
+The run loop is seven flat modules — `gamedata`, `runstate`, `rooms`,
+`acceptance`, `events`, `rewards`, `serialize` — with `run.py` on top holding the
+CLI and the fifteen verbs. Imports run one way down that list, and `run.py`
+re-exports every name it moved, so `run.<anything>` still resolves. Adding a
+public function to one of the siblings means adding it to `run.py`'s import block
+and its `__all__`; `tests/test_run_modules.py` will tell you if you forget.
+
+## What a good test looks like here
+
+Worth its own section, because this repo has shipped **five** tests that passed
+while the thing they named was broken. They failed in three shapes, and all three
+are easy to write by accident:
+
+- **A check that supplies the missing step.** A test that calls the setup the
+  production path forgot proves the function works *when correctly driven*, which
+  was never in doubt. Drive the real entry point instead.
+- **A fixture that fabricates a shape production cannot produce.** Building the
+  payload by hand tests the assertion, not the code that would have built it.
+- **A hand-written list that goes stale.** Every roster — of verbs, of modules,
+  of exported names — must be *derived* from the source it describes. A literal
+  list keeps passing for months after the thing it mirrors moves on.
+
+Two habits catch all three: **derive the list from the source**, and **never let
+a check provide the step it is testing**. And before you push a test for a bug
+you just fixed, confirm it fails against the unfixed code. A regression test that
+was never seen red is an assertion about nothing.
+
 ## Develop
 
 ```bash
-python3 -m pytest tests/        # scan + deck + class-schema + manifest tests
-python3 scripts/scan.py <repo>  # eyeball detection
-ruff check scripts/ tests/      # lint (matches the repo's own relic)
+python3 -m pytest tests/          # scan + deck + run loop + class schema
+python3 scripts/scan.py <repo>    # eyeball detection
+ruff check scripts/ tests/ tools/ # lint (matches the repo's own relic)
 ```
 
 Tests use only pytest; the class-schema and manifest tests additionally use
 PyYAML and skip themselves if PyYAML isn't installed.
+
+Touching `app/`, `server/` or `content/scenes.json` adds three more, the first
+two of which CI also runs:
+
+```bash
+node tools/build-app.mjs && git diff --exit-code -- server/assets/app.html
+node tools/scenes.mjs && node tools/scene-consumption.mjs
+node tools/shoot.mjs              # local only — needs a browser
+```
+
+`tools/shoot.mjs` is the one gate CI cannot run, because it drives a real
+Chromium. It is also the only thing that checks the backgrounds stay legible —
+it photographs each safe rectangle and fails on a local luminance step past the
+declared ceiling. **Run it by hand before pushing a client change**; it should
+end with `all screens rendered and checked`.
 
 Optional local hooks: `pip install pre-commit && pre-commit install` runs the
 same checks (`.pre-commit-config.yaml`) before each commit. CI runs them too
