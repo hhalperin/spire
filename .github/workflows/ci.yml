@@ -55,6 +55,14 @@ jobs:
         with:
           workspaces: server
 
+      - name: Every component draws no more rolls than it declares
+        # content/scenes.json declares each component's roll cost and the engine
+        # sizes every scene's vector from those numbers. Only JavaScript can
+        # check them, because the truth is eighteen path builders — so this runs
+        # them and fails if one ever outdraws its declaration. Under-declaring is
+        # invisible by eye: the scene stays deterministic and quietly repeats.
+        run: node tools/scenes.mjs --out /tmp/scenes.html
+
       - name: Bundle the client
         run: node tools/build-app.mjs
 

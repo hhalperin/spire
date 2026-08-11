@@ -34,27 +34,47 @@ const H = 700;
 
 /* A cursor over the engine's float vector.
  *
- * Each grammar entry consumes a FIXED slice — `2 + 3 * count_max` — whether or
- * not it uses all of it. That is deliberate: if entries consumed only what they
- * needed, adding one pillar to a scene would shift the dice of every entry after
- * it and silently redraw the whole background. content/scenes.json states the
- * same formula, and tests/test_scenes.py holds both to it. */
+ * Each grammar entry consumes a FIXED slice — `2 + component.rolls * count_max`
+ * — whether or not it uses all of it. That is deliberate: if entries consumed
+ * only what they needed, adding one pillar to a scene would shift the dice of
+ * every entry after it and silently redraw the whole background.
+ *
+ * The slice is a fence, not a suggestion. `open()` clamps reads to it, so a
+ * builder that asks for more than its component declared wraps inside its own
+ * slice rather than reaching into the next entry's. An earlier version only
+ * moved the cursor back to the mark afterwards, which let `crag` (14 draws
+ * against a slice of 5) hand its tail to whatever came next — the picture was
+ * still deterministic, so nothing looked broken; it just quietly correlated
+ * every entry in the scene with the one before it. Now the fence holds, and
+ * tools/scenes.mjs fails the build if a builder ever needs to lean on it. */
 class Rolls {
   constructor(values) {
     this.values = (values && values.length) ? values : [0.5];
     this.i = 0;
+    this.start = 0;
+    this.limit = this.values.length;
   }
 
   take() {
-    const value = this.values[this.i % this.values.length];
+    const span = Math.max(1, this.limit - this.start);
+    const value = this.values[(this.start + ((this.i - this.start) % span)) % this.values.length];
     this.i += 1;
     return value;
+  }
+
+  /* Fence this entry's slice off before drawing into it. */
+  open(start, slice) {
+    this.i = start;
+    this.start = start;
+    this.limit = start + slice;
   }
 
   /* Skip to the end of this entry's slice, so the next entry starts where the
      contract says it does regardless of what this one used. */
   advanceTo(mark) {
     this.i = mark;
+    this.start = mark;
+    this.limit = this.values.length;
   }
 
   between(low, high) {
@@ -444,9 +464,13 @@ export function composeScene({ scene, biome, modifier, rolls }) {
       });
       entries.forEach((entry) => {
         // Fixed slice: reserve this entry's budget before drawing anything, so
-        // one entry can never shift the dice of the next.
-        const slice = 2 + 3 * entry.count[1];
+        // one entry can never shift the dice of the next. The cost comes from
+        // the component's own declaration, because only the builder knows how
+        // many floats it draws.
+        const cost = (SCENES.components[entry.component] || {}).rolls || 0;
+        const slice = 2 + cost * entry.count[1];
         const mark = cursor.i + slice;
+        cursor.open(cursor.i, slice);
 
         const appears = cursor.take();
         const [low, high] = entry.count;

@@ -50,7 +50,9 @@ HEART_ACT = 4
 ENDLESS_ELITE_STEP = 0.12
 ENDLESS_ELITE_CAP = 2.5
 
-BOSSES_PATH = pathlib.Path(__file__).resolve().parent.parent / "content" / "bosses.json"
+CONTENT_DIR = pathlib.Path(__file__).resolve().parent.parent / "content"
+BOSSES_PATH = CONTENT_DIR / "bosses.json"
+SCENES_PATH = CONTENT_DIR / "scenes.json"
 
 # (row, col) -> set of columns on the next row.
 EdgeMap = dict["tuple[int, int]", "set[int]"]
@@ -96,10 +98,54 @@ def elite_multiplier(act: int, ascension: int) -> float:
     return mult
 
 
-# The background composer's roll budget. content/scenes.json states the same
-# number and tests/test_scenes.py holds the two together, because a client that
-# expects more rolls than the engine ships would silently compose half a scene.
-SCENE_ROLLS = 96
+# The fallback length for a scene the data does not describe. Every real scene
+# derives its own from its grammar (`scene_budget`); nobody should be maintaining
+# a global number that has to agree with what eighteen path builders happen to
+# draw. The first version of this did, and shipped 96 floats to a scene that
+# wanted 170 — deterministic, so nothing looked broken, and quietly repeating
+# itself.
+SCENE_ROLLS = 208
+
+_SCENES_CACHE: dict | None = None
+
+
+def load_scenes() -> dict:
+    """content/scenes.json — the background grammar, memoized."""
+    global _SCENES_CACHE
+    if _SCENES_CACHE is None:
+        with SCENES_PATH.open(encoding="utf-8") as fh:
+            _SCENES_CACHE = json.load(fh)
+    return _SCENES_CACHE
+
+
+def scene_budget(scene: str, scenes: dict | None = None) -> int:
+    """How many floats one scene's composer will walk.
+
+    Derived, never declared: the length follows from the scene's grammar and
+    each component's `rolls` cost, so nothing here can drift out of agreement
+    with the builders. It lives beside `scene_rolls` because the two answer one
+    question — the seeding owns the stream, so it owns the length.
+
+    Modifiers add entries to a scene rather than replacing it, so every scene
+    carries the worst modifier's extra. Over-shipping a few floats is free;
+    under-shipping makes the composer wrap and repeat itself.
+    """
+    scenes = scenes if scenes is not None else load_scenes()
+    spec = scenes.get("scenes", {}).get(scene)
+    if not spec:
+        return SCENE_ROLLS
+
+    costs = {key: entry.get("rolls", 0)
+             for key, entry in scenes["components"].items() if not key.startswith("_")}
+
+    def cost_of(entries: list[dict]) -> int:
+        return sum(2 + costs.get(entry["component"], 0) * entry["count"][1]
+                   for entry in entries)
+
+    total = sum(cost_of(entries) for entries in spec["grammar"].values())
+    extras = [sum(cost_of(entries) for entries in (mod.get("extra") or {}).values())
+              for key, mod in scenes["modifiers"].items() if not key.startswith("_")]
+    return total + max(extras, default=0)
 
 
 def scene_seed(seed: int, act: int, scene: str) -> int:
@@ -114,16 +160,20 @@ def scene_seed(seed: int, act: int, scene: str) -> int:
     return int.from_bytes(digest[:8], "big")
 
 
-def scene_rolls(seed: int, act: int, scene: str, count: int = SCENE_ROLLS) -> list[float]:
+def scene_rolls(seed: int, act: int, scene: str, count: int | None = None) -> list[float]:
     """The float vector the background composer walks.
 
     Same contract as `unknown_rolls`: the client has no RNG, so the engine
-    pre-rolls a fixed-length vector and the client applies the grammar in
-    content/scenes.json to it. Fixed length matters — a variable-length vector
-    would make the composer's fixed-slice cursor meaningless.
+    pre-rolls the vector and the client applies the grammar in
+    content/scenes.json to it.
+
+    `count` varies by scene, and that is safe rather than sloppy: the values are
+    a prefix of one stream, so asking for more floats never changes the ones
+    already there. A scene that grows a component keeps every die the components
+    before it were drawn with.
     """
     rng = random.Random(scene_seed(seed, act, scene))
-    return [rng.random() for _ in range(count)]
+    return [rng.random() for _ in range(scene_budget(scene) if count is None else count)]
 
 
 def floor_rng(seed: int, floor: int) -> random.Random:

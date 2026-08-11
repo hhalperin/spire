@@ -47,9 +47,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the architecture. No image assets, because an MCP App has no external origin to
   fetch one from — which is why this is a grammar and not an asset pipeline.
 - **Per act × scene variation, with no client RNG.** `mapgen.scene_rolls` seeds a
-  fixed float vector from the run seed and the act; `run.py` ships it on the map
+  float vector from the run seed and the act; `run.py` ships it on the map
   payload. Re-entering a floor is not similar to last time, it is the same
   picture. Act I's chamber and Act III's are the same room in different worlds.
+  The length is *derived* — `mapgen.scene_budget` reads it off the scene's own
+  grammar and each component's declared roll cost, so nobody maintains a number
+  that can disagree with what the builders draw. `tools/scenes.mjs` runs every
+  builder at the extremes of every range and fails the build if one outdraws its
+  declaration, which is a check only JavaScript can make.
 - **`tools/scenes.mjs`** — the gallery: every scene as a labelled wireframe and
   as composed art, per act, drawn from the same object the client reads, using
   rolls from the same function the engine ships.

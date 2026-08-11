@@ -19,7 +19,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -30,7 +30,9 @@ const flag = (name, fallback) => {
 };
 
 const SEED = Number(flag('seed', '0'));
-const OUT = join(ROOT, flag('out', 'docs/scenes.html'));
+// resolve, not join: an absolute --out must land where it was asked to,
+// not underneath the repo.
+const OUT = resolve(ROOT, flag('out', 'docs/scenes.html'));
 
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 const scenes = JSON.parse(read('content/scenes.json'));
@@ -52,6 +54,60 @@ function rollsFor(act, scene) {
 
 const biomes = Object.entries(scenes.biomes).filter(([k]) => k !== '_comment');
 const sceneNames = Object.keys(scenes.scenes);
+
+/* ------------------------------------------------------------- roll audit -- */
+
+/* Every component declares how many floats it draws, and `scripts/run.py` sizes
+ * each scene's vector from those declarations. Only this file can check the
+ * declaration against the truth, because the truth is eighteen JavaScript path
+ * builders. So: run each one against a counting cursor, at the extremes of every
+ * range it can be handed, and fail if it ever draws more than it promised.
+ *
+ * The composer fences each entry into its slice, so an under-declaration would
+ * not corrupt a neighbour — it would make one component silently repeat itself.
+ * That is a bug you would never notice by looking, which is what a check is for.
+ */
+const source = readFileSync(join(ROOT, 'app', 'scene.js'), 'utf8');
+const module_ = await import(`data:text/javascript,${encodeURIComponent(
+  `${source.replace(/^import .*$/gm, '')}\nexport { COMPONENTS };`,
+)}`);
+
+const overdrawn = [];
+for (const [name, spec] of Object.entries(scenes.components)) {
+  if (name.startsWith('_')) continue;
+  const builder = module_.COMPONENTS[name];
+  if (!builder) { overdrawn.push(`${name}: declared but no builder`); continue; }
+
+  let worst = 0;
+  // Sweep the unit interval: which branch a builder takes, and how many times it
+  // loops, are both decided by the floats it is given, so the worst case lives at
+  // one of the extremes rather than at a midpoint.
+  for (const fill of [0, 0.001, 0.25, 0.5, 0.75, 0.999]) {
+    for (const [, biome] of biomes) {
+      let drawn = 0;
+      const cursor = { take: () => { drawn += 1; return fill; } };
+      cursor.between = (lo, hi) => lo + cursor.take() * (hi - lo);
+      cursor.intBetween = (lo, hi) => (hi <= lo ? lo
+        : Math.min(hi, lo + Math.floor(cursor.take() * (hi - lo + 1))));
+      cursor.pick = (list) => (list && list.length
+        ? list[Math.min(list.length - 1, Math.floor(cursor.take() * list.length))] : null);
+      builder({ x: 0, y: 0, w: 400, h: 300 }, cursor, biome);
+      worst = Math.max(worst, drawn);
+    }
+  }
+  if (worst > spec.rolls) {
+    overdrawn.push(`${name}: declares ${spec.rolls} rolls, draws up to ${worst}`);
+  }
+}
+
+if (overdrawn.length) {
+  process.stderr.write(`\nscenes: component roll costs are wrong:\n`);
+  overdrawn.forEach((line) => process.stderr.write(`  ✗ ${line}\n`));
+  process.stderr.write('Fix content/scenes.json → components.*.rolls, then re-run.\n');
+  process.exit(1);
+}
+console.error(`scenes: ${Object.keys(scenes.components).length - 1} components draw`
+  + ' no more than they declare');
 
 /* Pre-roll everything up front so the page needs no runtime process access. */
 const rolls = {};
@@ -324,6 +380,6 @@ window.__scenes = { SCENES_DATA, ROLLS, composeScene, renderComposed };
 mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, html, 'utf8');
 console.error(
-  `scenes: wrote ${OUT.replace(ROOT + '/', '')} — `
+  `scenes: wrote ${OUT.replace(`${ROOT}/`, '')} — `
   + `${sceneNames.length} scenes × ${biomes.length} acts, ${Math.round(html.length / 1024)}K`,
 );

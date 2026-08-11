@@ -4,9 +4,8 @@
   "version": 1,
 
   "roll_budget": {
-    "_comment": "The client has no RNG. Following scripts/mapgen.py's `unknown_rolls`, the engine pre-rolls a fixed float vector and the composer walks it in declared order. `per_entry` is the contract: every grammar entry consumes `2 + 3 * count_max` rolls — appear, count, then x/scale/variant for each possible instance — whether or not it uses them. Consuming a fixed slice is what stops one entry's dice from shifting every entry after it.",
-    "count": 96,
-    "per_entry_formula": "2 + 3 * count_max"
+    "_comment": "The client has no RNG. Following scripts/mapgen.py's `unknown_rolls`, the engine pre-rolls a float vector and the composer walks it in declared order. Every grammar entry consumes a FIXED slice — `2 + components[component].rolls * count_max`: an appear roll, a count roll, then each possible instance's worth — whether or not it uses all of it. Consuming a fixed slice is what stops one entry's dice from shifting every entry after it, and the composer will not read outside its slice even when a builder asks for more. There is deliberately no total here: the length a scene needs follows from its grammar and from `components.*.rolls`, so `mapgen.scene_budget` derives it rather than anyone maintaining a number that can silently disagree with what eighteen path builders actually draw. The first version of this file did maintain one, and shipped 96 floats to a scene that walked 170 — deterministic, so nothing looked broken, and quietly repeating itself.",
+    "per_entry_formula": "2 + components[component].rolls * count_max"
   },
 
   "contrast": {
@@ -38,28 +37,28 @@
   },
 
   "components": {
-    "_comment": "The inventory. `layer` is the only layer an instance may be placed on; tests/test_scenes.py refuses a grammar entry that puts a component on the wrong one. `anchor` says which edge the shape grows from, which is what lets one path builder serve both wings and the crown.",
-    "crag": {"layer": "far", "anchor": "bottom", "about": "A jagged ridge of rock."},
-    "tower": {"layer": "far", "anchor": "bottom", "about": "The spire's own body, seen from outside or across."},
-    "skyline": {"layer": "far", "anchor": "bottom", "about": "A low broken horizon of distant structure."},
+    "_comment": "The inventory. `layer` is the only layer an instance may be placed on; tests/test_scenes.py refuses a grammar entry that puts a component on the wrong one. `anchor` says which edge the shape grows from, which is what lets one path builder serve both wings and the crown. `rolls` is the worst case number of floats the builder draws for one instance — the number the slice formula multiplies. Only JavaScript can check it, so tools/scenes.mjs runs every builder at the extremes of every range and fails the build if one outdraws its declaration.",
+    "crag": {"layer": "far", "anchor": "bottom", "about": "A jagged ridge of rock.", "rolls": 14},
+    "tower": {"layer": "far", "anchor": "bottom", "about": "The spire's own body, seen from outside or across.", "rolls": 2},
+    "skyline": {"layer": "far", "anchor": "bottom", "about": "A low broken horizon of distant structure.", "rolls": 9},
 
-    "pillar": {"layer": "mid", "anchor": "bottom", "about": "A standing column. Variants: round, fluted, broken."},
-    "arch": {"layer": "mid", "anchor": "top", "about": "A span. Variants: round, pointed, broken."},
-    "window": {"layer": "mid", "anchor": "free", "about": "An opening. Variants: slit, barred, rose."},
-    "wall": {"layer": "mid", "anchor": "bottom", "about": "Coursed blockwork."},
-    "stair": {"layer": "mid", "anchor": "bottom", "about": "Ascending steps, read edge-on."},
-    "gate": {"layer": "mid", "anchor": "bottom", "about": "A closed way. The act's threshold."},
-    "brazier": {"layer": "mid", "anchor": "bottom", "about": "A standing fire bowl."},
-    "stall": {"layer": "mid", "anchor": "top", "about": "An awning over a merchant's nook."},
-    "chest": {"layer": "mid", "anchor": "bottom", "about": "A strapped box on a plinth."},
+    "pillar": {"layer": "mid", "anchor": "bottom", "about": "A standing column. Variants: round, fluted, broken.", "rolls": 4},
+    "arch": {"layer": "mid", "anchor": "top", "about": "A span. Variants: round, pointed, broken.", "rolls": 4},
+    "window": {"layer": "mid", "anchor": "free", "about": "An opening. Variants: slit, barred, rose.", "rolls": 4},
+    "wall": {"layer": "mid", "anchor": "bottom", "about": "Coursed blockwork.", "rolls": 2},
+    "stair": {"layer": "mid", "anchor": "bottom", "about": "Ascending steps, read edge-on.", "rolls": 1},
+    "gate": {"layer": "mid", "anchor": "bottom", "about": "A closed way. The act's threshold.", "rolls": 1},
+    "brazier": {"layer": "mid", "anchor": "bottom", "about": "A standing fire bowl.", "rolls": 0},
+    "stall": {"layer": "mid", "anchor": "top", "about": "An awning over a merchant's nook.", "rolls": 2},
+    "chest": {"layer": "mid", "anchor": "bottom", "about": "A strapped box on a plinth.", "rolls": 0},
 
-    "pillar_edge": {"layer": "near", "anchor": "side", "about": "The near face of a column, cropped by the frame."},
-    "chain": {"layer": "near", "anchor": "top", "about": "A hanging line, sometimes with a hook."},
-    "banner": {"layer": "near", "anchor": "top", "about": "Cloth hung from above, torn at the hem."},
-    "root": {"layer": "near", "anchor": "side", "about": "Organic intrusion through the stone."},
+    "pillar_edge": {"layer": "near", "anchor": "side", "about": "The near face of a column, cropped by the frame.", "rolls": 1},
+    "chain": {"layer": "near", "anchor": "top", "about": "A hanging line, sometimes with a hook.", "rolls": 2},
+    "banner": {"layer": "near", "anchor": "top", "about": "Cloth hung from above, torn at the hem.", "rolls": 3},
+    "root": {"layer": "near", "anchor": "side", "about": "Organic intrusion through the stone.", "rolls": 3},
 
-    "rubble": {"layer": "floor", "anchor": "bottom", "about": "Fallen stone scattered along the ground line."},
-    "step": {"layer": "floor", "anchor": "bottom", "about": "The lip of the floor plane."}
+    "rubble": {"layer": "floor", "anchor": "bottom", "about": "Fallen stone scattered along the ground line.", "rolls": 19},
+    "step": {"layer": "floor", "anchor": "bottom", "about": "The lip of the floor plane.", "rolls": 1}
   },
 
   "biomes": {

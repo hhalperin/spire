@@ -131,8 +131,11 @@ function paintScene(screen) {
   const rolls = (ui.map && ui.map.scene_rolls && ui.map.scene_rolls[scene]) || null;
 
   // Recomposing costs a few hundred path builds, and render() fires on every
-  // card played. Redraw only when the place actually changed.
-  const key = `${scene}|${biome}|${modifier || ''}|${rolls ? rolls.length : 0}`;
+  // card played. Redraw only when the place actually changed — which means the
+  // seed belongs in the key: starting a new run lands you on the same screen in
+  // the same act with a vector of the same length and entirely different dice.
+  const seed = ui.map ? ui.map.seed : null;
+  const key = `${scene}|${biome}|${modifier || ''}|${act}|${seed}`;
   if (host.dataset.key === key) return;
   host.dataset.key = key;
 

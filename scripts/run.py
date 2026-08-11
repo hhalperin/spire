@@ -698,9 +698,15 @@ def scene_table(seed: int, act: int) -> dict[str, list[float]]:
     same reason. It rides on the *map* rather than on the state because that is
     the payload with the matching lifetime: scene rolls depend on the seed and
     the act and nothing else, and the map is exactly what the client refetches
-    when the act changes. Putting it on the state would repeat six kilobytes of
-    dice on every card played; shipping only the current scene would leave the
-    deck and badges screens undrawable, since the engine never sees them.
+    when the act changes. Putting it on the state would repeat kilobytes of dice
+    on every card played; shipping only the current scene would leave the deck
+    and badges screens undrawable, since the engine never sees them.
+
+    Each scene gets exactly the length it needs — `mapgen.scene_budget` derives
+    that from the grammar, so nothing here maintains a number. Because the vector
+    is a prefix of one stream, growing a scene's grammar lengthens it without
+    disturbing the floats already in it: the components already placed keep their
+    dice.
 
     Rounded to three places. The composer's thresholds are coarse — how many
     pillars, which slot, which variant — so the fourth decimal cannot change a

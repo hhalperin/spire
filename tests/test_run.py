@@ -803,7 +803,9 @@ def test_the_map_ships_a_roll_vector_for_every_scene(repo):
     rolls = call(repo, "map")["map"]["scene_rolls"]
     declared = {name for name in run.content("scenes")["scenes"] if not name.startswith("_")}
     assert set(rolls) == declared
-    assert {len(v) for v in rolls.values()} == {mapgen.SCENE_ROLLS}
+    # Each scene gets the length its own grammar asks for, not a global constant.
+    for name, vector in rolls.items():
+        assert len(vector) == mapgen.scene_budget(name), name
     assert all(0.0 <= value <= 1.0 for vector in rolls.values() for value in vector)
 
 

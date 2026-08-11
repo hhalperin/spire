@@ -267,35 +267,76 @@ def test_there_is_exactly_one_warm_source_per_scene(scenes):
 # the roll budget
 # --------------------------------------------------------------------------- #
 
-def rolls_needed(scene: dict) -> int:
-    """Mirror of the composer's fixed-slice contract."""
-    total = 0
-    for entries in scene["grammar"].values():
-        for entry in entries:
-            total += 2 + 3 * entry["count"][1]
-    return total
+def rolls_needed(scenes: dict, name: str) -> int:
+    """Independent restatement of the composer's fixed-slice contract.
+
+    Deliberately written from the JSON rather than by calling
+    `mapgen.scene_budget`, so this checks the engine rather than agreeing with
+    it. The first version of this file mirrored the *formula* the composer
+    declared (`2 + 3 * count_max`) instead of what the builders drew, and so
+    passed happily while every scene overran its vector by roughly double.
+    """
+    costs = {key: entry["rolls"]
+             for key, entry in scenes["components"].items() if not key.startswith("_")}
+    return sum(
+        2 + costs[entry["component"]] * entry["count"][1]
+        for entries in scenes["scenes"][name]["grammar"].values()
+        for entry in entries
+    )
 
 
-def test_no_scene_needs_more_rolls_than_the_engine_ships(scenes):
-    budget = scenes["roll_budget"]["count"]
-    for name, scene in scenes["scenes"].items():
-        needed = rolls_needed(scene)
-        assert needed <= budget, (
-            f"{name} needs {needed} rolls but the engine ships {budget}. "
-            "Either simplify the grammar or raise roll_budget.count (and SCENE_ROLLS "
-            "in scripts/run.py, which must agree)."
+def test_every_component_declares_what_it_draws(scenes):
+    """The slice formula multiplies this number. A component without one gets a
+    slice of two, and silently repeats itself inside it."""
+    for name, entry in scenes["components"].items():
+        if name.startswith("_"):
+            continue
+        assert "rolls" in entry, f"{name} declares no roll cost"
+        assert isinstance(entry["rolls"], int) and entry["rolls"] >= 0, name
+        assert entry["rolls"] <= 24, (
+            f"{name} claims {entry['rolls']} rolls per instance — past about 20 "
+            "the component is doing too much and should be split"
         )
 
 
-def test_the_engine_and_the_data_agree_on_the_roll_count(scenes):
-    """Two files name this number. If they drift, the client composes a partial
-    scene and nothing errors — the worst kind of bug, so it gets a test."""
+def test_the_engine_ships_every_scene_the_rolls_it_will_walk(scenes):
+    """The bug this file exists to prevent: a vector shorter than the walk. It
+    does not error — the cursor wraps and the scene quietly repeats itself."""
     import mapgen
 
-    assert mapgen.SCENE_ROLLS == scenes["roll_budget"]["count"], (
-        f"mapgen.SCENE_ROLLS is {mapgen.SCENE_ROLLS} but content/scenes.json "
-        f"declares {scenes['roll_budget']['count']}"
+    for name in scenes["scenes"]:
+        needed = rolls_needed(scenes, name)
+        shipped = mapgen.scene_budget(name)
+        assert shipped >= needed, (
+            f"{name} walks {needed} rolls but the engine ships {shipped}"
+        )
+
+
+def test_a_scene_carries_the_worst_modifier_on_top(scenes):
+    """Modifiers add entries to a scene rather than replacing it, so the budget
+    has to cover the version with the most in it, not the bare one."""
+    import mapgen
+
+    extra = max(
+        sum(2 + scenes["components"][entry["component"]]["rolls"] * entry["count"][1]
+            for entries in (mod.get("extra") or {}).values() for entry in entries)
+        for key, mod in scenes["modifiers"].items() if not key.startswith("_")
     )
+    assert extra > 0, "no modifier adds anything — this test is watching nothing"
+    for name in scenes["scenes"]:
+        assert mapgen.scene_budget(name) >= rolls_needed(scenes, name) + extra
+
+
+def test_growing_a_scene_keeps_the_dice_already_dealt():
+    """Why a per-scene length is safe. The vector is a prefix of one stream, so
+    asking for more floats never disturbs the ones already there — a scene that
+    gains a component keeps every die the components before it were drawn with.
+    """
+    import mapgen
+
+    short = mapgen.scene_rolls(5, 2, "chamber", 40)
+    long = mapgen.scene_rolls(5, 2, "chamber", 120)
+    assert long[:40] == short
 
 
 def test_scene_rolls_are_deterministic_and_isolated():
@@ -304,7 +345,7 @@ def test_scene_rolls_are_deterministic_and_isolated():
 
     a = mapgen.scene_rolls(7, 1, "chamber")
     assert a == mapgen.scene_rolls(7, 1, "chamber")
-    assert len(a) == mapgen.SCENE_ROLLS
+    assert len(a) == mapgen.scene_budget("chamber")
     assert all(0.0 <= r < 1.0 for r in a)
     assert a != mapgen.scene_rolls(7, 2, "chamber"), "acts must not share a scene"
     assert a != mapgen.scene_rolls(7, 1, "alcove"), "scenes must not share a roll stream"
@@ -325,11 +366,17 @@ def test_scene_seeds_do_not_collide_across_the_act_scene_grid():
             seen[value] = (act, scene)
 
 
-def test_the_roll_budget_is_not_wildly_oversized(scenes):
-    """A budget far above the worst scene is dead weight in every payload."""
-    budget = scenes["roll_budget"]["count"]
-    worst = max(rolls_needed(scene) for scene in scenes["scenes"].values())
-    assert budget < worst * 3, f"worst scene needs {worst}; budget is {budget}"
+def test_no_scene_ships_rolls_it_will_never_walk(scenes):
+    """The other side of the same coin. Every float rides on the map payload ten
+    times over, so a budget well above what a scene walks is dead weight."""
+    import mapgen
+
+    for name in scenes["scenes"]:
+        needed = rolls_needed(scenes, name)
+        shipped = mapgen.scene_budget(name)
+        assert shipped <= needed * 2 + 32, (
+            f"{name} walks {needed} rolls but is shipped {shipped}"
+        )
 
 
 def test_counts_are_sane_ranges(scenes):
