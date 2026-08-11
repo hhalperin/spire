@@ -1,0 +1,883 @@
+/* Spire — the client stylesheet.
+ *
+ * Dark is the default here, which is a reversal. design/spire-ai/ui/DESIGN_SYSTEM.md
+ * v0 committed to "ink on paper … not game-like", and that was a considered call
+ * for a wireframe. It is the wrong call for a game. Slay the Spire is a torchlit
+ * stone corridor with parchment in your hands, and reading as a dashboard is the
+ * single fastest way to stop feeling like one. So: stone and ember by default,
+ * the original paper palette kept intact as the light theme.
+ *
+ * What survives from v0 unchanged, because it was right:
+ *   - one accent at a time (facet accent OR class accent, never both competing)
+ *   - geometry over gradients
+ *   - a motion budget of 2-3 beats per facet, and no continuous glow
+ *   - silhouette before colour: every entity is identifiable in greyscale
+ *   - Skip is never styled as the disabled option
+ *
+ * Theme resolution is three-state on purpose. An MCP App host sends
+ * hostContext.theme, which lands on [data-theme]; with no host, prefers-color-scheme
+ * decides; the dark palette is the bare :root default so a transparent container
+ * can never leave us unpainted.
+ */
+
+/* ---------------------------------------------------------------- tokens -- */
+
+:root {
+  /* Stone: the spire itself. */
+  --stone-900: #0b0908;
+  --stone-800: #131010;
+  --stone-700: #1b1715;
+  --stone-600: #241f1a;
+  --stone-500: #2f2822;
+  --line: #3b322a;
+  --line-soft: #2a231d;
+
+  /* Parchment: anything you hold. */
+  --parchment: #e7dbc0;
+  --parchment-2: #d6c5a3;
+  --parchment-ink: #221c14;
+
+  --ink: #f2e9d8;
+  --ink-soft: #cabda4;
+  --muted: #8d8171;
+
+  /* Ember is the torch. It is the one warm light in the room. */
+  --ember: #d9832f;
+  --ember-hot: #f2ac57;
+  --gold: #d9b464;
+  --blood: #cf5648;
+  --moss: #74b183;
+  --violet: #ab98d8;
+  --steel: #83b3d2;
+
+  /* Small text needs its own darker/lighter variant — the fill values measure
+     between 2.7:1 and 3.9:1 at caption sizes and would fail AA on their own.
+     v0 recorded this for paper; the same rule applies inverted on stone. */
+  --moss-text: #93c9a0;
+  --gold-text: #e6c884;
+  --ember-text: #f0ac66;
+  --blood-text: #e07f72;
+
+  /* Facet accents — name the mode at a glance. */
+  --facet-title: #d9b464;
+  --facet-map: #83b3d2;
+  --facet-intent: #d9832f;
+  --facet-combat: #cf5648;
+  --facet-reward: #74b183;
+  --facet-campfire: #f2ac57;
+  --facet-shop: #ab98d8;
+  --facet-event: #8fb583;
+  --facet-deck: #cabda4;
+  --facet: var(--facet-map);
+
+  /* Room types get their own scale. Nothing else may use these as a primary,
+     and every use is paired with a glyph or a label — never colour alone. */
+  --room-bug: #d76a5f;
+  --room-feature: #83b3d2;
+  --room-refactor: #ab98d8;
+  --room-design: #9a9ad0;
+  --room-docs: #8fb583;
+  --room-infra: #d79a6a;
+  --room-orient: #9a9084;
+
+  --card-face: var(--parchment);
+  --card-ink: var(--parchment-ink);
+  --surface: var(--stone-700);
+  --surface-2: var(--stone-600);
+  --bg: var(--stone-900);
+
+  --radius: 5px;
+  --radius-lg: 11px;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .5), 0 2px 10px rgba(0, 0, 0, .35);
+  --shadow-2: 0 8px 26px rgba(0, 0, 0, .55);
+  --shadow-card: 0 12px 30px rgba(0, 0, 0, .6);
+  --glow: 0 0 0 1px rgba(217, 131, 47, .35), 0 0 22px -6px rgba(217, 131, 47, .55);
+
+  --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  --font-body: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --font-ui: ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+
+  --t-fast: 150ms;
+  --t-mid: 280ms;
+  --t-slow: 420ms;
+  --ease: cubic-bezier(.22, .61, .36, 1);
+}
+
+/* The v0 paper palette, preserved. Every contrast decision recorded in
+   DESIGN_SYSTEM.md still holds here, including campfire at #9c5527 (4.89:1)
+   rather than the #a65d2e that measured 4.33:1 and was retired. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    --stone-900: #f3efe6;
+    --stone-800: #ece6da;
+    --stone-700: #ebe4d8;
+    --stone-600: #e2dacb;
+    --stone-500: #d8cfbd;
+    --line: #c9c1b4;
+    --line-soft: #ddd5c6;
+
+    --parchment: #fbf7ee;
+    --parchment-2: #ece6da;
+    --parchment-ink: #1c1916;
+
+    --ink: #1c1916;
+    --ink-soft: #2c2822;
+    --muted: #6b645c;
+
+    --ember: #9c5527;
+    --ember-hot: #b4682f;
+    --gold: #9a7b34;
+    --blood: #8f2d2d;
+    --moss: #2f5d3a;
+    --violet: #5c4d7a;
+    --steel: #3a5f7a;
+
+    --moss-text: #1f4a2b;
+    --gold-text: #6b5320;
+    --ember-text: #7d4520;
+    --blood-text: #7a2626;
+
+    --facet-title: #9a7b34;
+    --facet-map: #3a5f7a;
+    --facet-intent: #8a4b2e;
+    --facet-combat: #8f2d2d;
+    --facet-reward: #2f5d3a;
+    --facet-campfire: #9c5527;
+    --facet-shop: #5c4d7a;
+    --facet-event: #4a6741;
+    --facet-deck: #1c1916;
+
+    --room-bug: #8f2d2d;
+    --room-feature: #3a5f7a;
+    --room-refactor: #5c4d7a;
+    --room-design: #4a4a6a;
+    --room-docs: #4a6741;
+    --room-infra: #8a4b2e;
+    --room-orient: #6b645c;
+
+    --shadow-1: 0 1px 2px rgba(28, 25, 22, .08), 0 2px 8px rgba(28, 25, 22, .06);
+    --shadow-2: 0 6px 18px rgba(28, 25, 22, .14);
+    --shadow-card: 0 10px 26px rgba(28, 25, 22, .22);
+    --glow: 0 0 0 1px rgba(156, 85, 39, .3), 0 0 18px -8px rgba(156, 85, 39, .5);
+  }
+}
+
+/* An explicit host or user choice wins over the media query in both directions. */
+:root[data-theme='light'] {
+  --stone-900: #f3efe6; --stone-800: #ece6da; --stone-700: #ebe4d8;
+  --stone-600: #e2dacb; --stone-500: #d8cfbd; --line: #c9c1b4; --line-soft: #ddd5c6;
+  --parchment: #fbf7ee; --parchment-2: #ece6da; --parchment-ink: #1c1916;
+  --ink: #1c1916; --ink-soft: #2c2822; --muted: #6b645c;
+  --ember: #9c5527; --ember-hot: #b4682f; --gold: #9a7b34; --blood: #8f2d2d;
+  --moss: #2f5d3a; --violet: #5c4d7a; --steel: #3a5f7a;
+  --moss-text: #1f4a2b; --gold-text: #6b5320; --ember-text: #7d4520; --blood-text: #7a2626;
+  --facet-title: #9a7b34; --facet-map: #3a5f7a; --facet-intent: #8a4b2e;
+  --facet-combat: #8f2d2d; --facet-reward: #2f5d3a; --facet-campfire: #9c5527;
+  --facet-shop: #5c4d7a; --facet-event: #4a6741; --facet-deck: #1c1916;
+  --room-bug: #8f2d2d; --room-feature: #3a5f7a; --room-refactor: #5c4d7a;
+  --room-design: #4a4a6a; --room-docs: #4a6741; --room-infra: #8a4b2e; --room-orient: #6b645c;
+  --shadow-1: 0 1px 2px rgba(28, 25, 22, .08), 0 2px 8px rgba(28, 25, 22, .06);
+  --shadow-2: 0 6px 18px rgba(28, 25, 22, .14);
+  --shadow-card: 0 10px 26px rgba(28, 25, 22, .22);
+  --glow: 0 0 0 1px rgba(156, 85, 39, .3), 0 0 18px -8px rgba(156, 85, 39, .5);
+}
+
+:root[data-theme='dark'] { color-scheme: dark; }
+:root[data-theme='light'] { color-scheme: light; }
+
+/* ------------------------------------------------------------------ base -- */
+
+* { box-sizing: border-box; }
+
+/* [hidden] must beat any class that sets display, or a screen toggled off by
+   the state machine stays on screen. */
+[hidden] { display: none !important; }
+
+html, body { margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* The torchlight. One warm pool at the top of the shaft, tinted to whatever
+   facet you are in — this is what stops the page reading as a document. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(120% 70% at 50% -12%,
+      color-mix(in srgb, var(--facet) 22%, transparent), transparent 62%),
+    radial-gradient(90% 60% at 50% 115%, rgba(0, 0, 0, .55), transparent 60%);
+  transition: background var(--t-slow) var(--ease);
+}
+
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--facet);
+  outline-offset: 2px;
+}
+
+.shell {
+  position: relative;
+  z-index: 1;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 14px 16px 28px;
+}
+
+/* ---------------------------------------------------------------- chrome -- */
+
+.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: .16em;
+  color: var(--ink);
+}
+
+.tagline { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+
+.topbar-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+.icon-btn {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink-soft);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 5px 9px;
+  transition: border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.icon-btn:hover { border-color: var(--facet); color: var(--ink); }
+
+/* The run line. Deck size lives here permanently: ENTITY_STANDARDS rule 3 says
+   the count must be on screen during a run, because a deck cost you cannot see
+   is a cost that never makes refusing feel like a win. */
+.chrome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 10px 0;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.chrome b { color: var(--ink); font-weight: 600; }
+
+.chip {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+
+.chip.cls { color: var(--steel); }
+.chip.cap-warn { color: var(--blood-text); border-color: var(--blood); }
+
+.pips { display: inline-flex; gap: 3px; vertical-align: middle; }
+.pip {
+  width: 11px; height: 11px; border-radius: 50%;
+  border: 1.5px solid var(--ember);
+  background: transparent;
+}
+.pip.on { background: var(--ember); box-shadow: 0 0 8px -2px var(--ember-hot); }
+
+/* chrome.md: the banner is the single-task policy made visible. */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--blood);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--blood) 12%, var(--surface));
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+}
+.banner .dot { color: var(--blood-text); }
+.banner .spacer { margin-left: auto; }
+
+/* ---------------------------------------------------------------- screen -- */
+
+.stage { min-height: 540px; padding-top: 16px; }
+
+.screen { animation: screen-in var(--t-mid) var(--ease) both; }
+
+.facet-tab {
+  display: inline-block;
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .17em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 3px;
+  background: var(--facet);
+  color: var(--stone-900);
+  margin-bottom: 12px;
+}
+
+.hero-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 34px;
+  line-height: 1.1;
+  margin: 0 0 6px;
+}
+
+.sub { color: var(--muted); font-size: 14px; margin: 0 0 18px; }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-1);
+}
+
+.grid { display: grid; gap: 14px; }
+.cols-2 { grid-template-columns: 1.5fr 1fr; }
+@media (max-width: 760px) { .cols-2 { grid-template-columns: 1fr; } }
+
+/* CTAs. Solid is the one primary action a facet is allowed. */
+.btn {
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  border: 1.5px solid var(--facet);
+  background: var(--facet);
+  color: var(--stone-900);
+  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+.btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-2); }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn.ghost:hover { border-color: var(--facet); }
+.btn.danger { background: transparent; color: var(--blood-text); border-color: var(--blood); }
+.btn[aria-disabled='true'] { opacity: .4; pointer-events: none; }
+
+.actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; align-items: center; }
+
+/* ------------------------------------------------------------------- map -- */
+
+.map-wrap { position: relative; }
+
+.map-canvas {
+  position: relative;
+  width: 100%;
+  /* Floor 1 at the bottom, boss at the top. The original demo laid the graph out
+     left-to-right, which reads as a flowchart; a spire is climbed. */
+  height: calc(var(--floors, 16) * 46px);
+  max-height: min(58vh, 520px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, .18), transparent 30%),
+    var(--stone-800);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  /* Per-axis, not the shorthand. `overflow: hidden` here would reset the
+     overflow-y above and silently defeat the scroll-to-your-position code —
+     the climb would render as a clipped column with no way to reach the rest. */
+  overflow-x: hidden;
+}
+
+.map-canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.map-edge { stroke: var(--line); stroke-width: 2; fill: none; opacity: .9; }
+.map-edge.lit { stroke: var(--facet); stroke-width: 2.5; opacity: .9; }
+.map-edge.open { stroke: var(--ember); stroke-width: 3.5; opacity: 1; }
+
+.mnode {
+  position: absolute;
+  width: 26px; height: 26px;
+  transform: translate(-50%, -50%);
+  border: 2px solid var(--ink-soft);
+  border-radius: 50%;
+  background: var(--stone-600);
+  /* Unreached nodes stay quiet but must remain readable — the route you are
+     planning is made of them. Too faint and the map stops being a plan. */
+  opacity: .62;
+  padding: 0;
+  transition: transform var(--t-fast) var(--ease), opacity var(--t-fast) var(--ease),
+              box-shadow var(--t-fast) var(--ease);
+}
+
+/* Silhouette, not colour. No two node kinds may share a shape — that is why the
+   merchant is a hexagon and the unknown owns the diamond. */
+.mnode.k-elite { width: 32px; height: 32px; box-shadow: inset 0 0 0 3px var(--stone-800); }
+.mnode.k-boss { width: 38px; height: 38px; border-width: 3px; }
+.mnode.k-rest { border-radius: 8px; }
+.mnode.k-treasure { border-radius: 3px; width: 22px; height: 22px; }
+.mnode.k-shop { border-radius: 0; clip-path: polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0 50%); }
+.mnode.k-unknown { border-radius: 0; clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.mnode.k-event { border-radius: 0; clip-path: polygon(50% 8%, 92% 50%, 50% 92%, 8% 50%); border-style: dashed; }
+
+.mnode .g {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.mnode.cleared { opacity: .4; border-color: var(--muted); }
+.mnode.cleared .g { color: var(--muted); }
+.mnode.legal {
+  opacity: 1;
+  border-color: var(--ember);
+  box-shadow: var(--glow);
+  cursor: pointer;
+}
+.mnode.legal:hover { transform: translate(-50%, -50%) scale(1.18); }
+.mnode.current {
+  opacity: 1;
+  background: var(--ember);
+  border-color: var(--ember-hot);
+  transform: translate(-50%, -50%) scale(1.12);
+}
+.mnode.selected { box-shadow: 0 0 0 3px var(--facet); }
+
+/* The annotation layer. Slay the Spire 2 shipped a draw tool for exactly this:
+   marking a route before you commit to an edge. */
+.mnode .mark {
+  position: absolute;
+  top: -9px; right: -9px;
+  font-size: 11px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6));
+}
+
+.you-are-here {
+  position: absolute;
+  transform: translate(-50%, 20px);
+  font-family: var(--font-ui);
+  font-size: 9.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--stone-900);
+  background: var(--ember);
+  padding: 1px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.map-legend {
+  display: flex; flex-wrap: wrap; gap: 6px 14px;
+  font-family: var(--font-ui); font-size: 11px; color: var(--muted);
+  margin-top: 10px;
+}
+
+.marker-bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.marker {
+  width: 30px; height: 30px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 14px;
+  line-height: 1;
+  display: grid; place-items: center;
+}
+.marker[aria-pressed='true'] { border-color: var(--ember); box-shadow: var(--glow); }
+.marker-hint { font-family: var(--font-ui); font-size: 11px; color: var(--muted); }
+
+/* ------------------------------------------------------------------ room -- */
+
+.enemy {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.enemy-sil {
+  flex: 0 0 auto;
+  width: 62px; height: 62px;
+  display: grid; place-items: center;
+  border: 2px solid var(--room, var(--facet));
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--room, var(--facet)) 16%, var(--surface));
+  font-size: 24px;
+}
+.enemy-sil.elite { box-shadow: inset 0 0 0 4px var(--surface), 0 0 0 2px var(--room, var(--facet)); }
+.enemy-sil.boss { width: 74px; height: 74px; border-width: 3px; }
+
+.enemy-name { font-family: var(--font-display); font-size: 26px; font-weight: 600; margin: 0; }
+.enemy-meta { font-family: var(--font-ui); font-size: 12px; color: var(--muted); }
+
+.room-chip {
+  display: inline-block;
+  font-family: var(--font-ui); font-size: 10.5px;
+  letter-spacing: .08em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 3px;
+  border: 1px solid currentColor;
+}
+.rt-bug { color: var(--room-bug); }
+.rt-feature { color: var(--room-feature); }
+.rt-refactor { color: var(--room-refactor); }
+.rt-design { color: var(--room-design); }
+.rt-docs { color: var(--room-docs); }
+.rt-infra { color: var(--room-infra); }
+.rt-orient { color: var(--room-orient); }
+
+/* The intent bar. Icons are the Slay the Spire 2 vocabulary; the chip after each
+   one names the deterministic sensor that produced it. Multiple intents sit side
+   by side rather than stacking, which is what StS2 changed and it reads better. */
+.intents { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 0; }
+
+.intent {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--tone, var(--facet-intent));
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  animation: intent-reveal 300ms var(--ease) both;
+}
+.intent .icon {
+  font-size: 17px; line-height: 1;
+  color: var(--tone, var(--facet-intent));
+  min-width: 1.4em; text-align: center;
+}
+.intent .n {
+  font-family: var(--font-mono); font-size: 15px; font-weight: 500;
+  color: var(--tone, var(--facet-intent));
+}
+.intent .txt { font-size: 14px; }
+.intent .sensor {
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--muted); border: 1px solid var(--line);
+  border-radius: 3px; padding: 1px 5px; margin-left: 4px;
+}
+.tone-danger { --tone: var(--blood-text); }
+.tone-warn { --tone: var(--ember-text); }
+.tone-safe { --tone: var(--moss-text); }
+.tone-muted { --tone: var(--muted); }
+
+/* No sensor, no intent. Saying so is honest disclosure; a hedge would not be. */
+.no-intent {
+  margin-top: 14px; padding: 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--muted); font-size: 13.5px;
+}
+
+.acceptance {
+  margin-top: 14px;
+  font-family: var(--font-mono); font-size: 12.5px;
+  background: var(--stone-900); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 10px 12px;
+  overflow-x: auto;
+}
+:root[data-theme='light'] .acceptance,
+.acceptance { --shadow: none; }
+.acceptance .verdict { font-weight: 500; }
+.acceptance .pass { color: var(--moss-text); }
+.acceptance .fail { color: var(--blood-text); }
+.acceptance .unknown { color: var(--muted); }
+
+/* The progress meter. Deliberately NOT a health bar — it fills upward toward a
+   target and resets with the room. The field is called clear_at in the data for
+   the same reason. */
+.meter-row { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+.meter {
+  position: relative; flex: 1;
+  height: 12px; border-radius: 999px;
+  background: var(--stone-900);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.meter-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--ember), var(--ember-hot));
+  transition: width var(--t-slow) var(--ease);
+}
+.meter-label { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-soft); }
+
+/* ------------------------------------------------------------------ hand -- */
+
+.hand {
+  display: flex; justify-content: center; align-items: flex-end;
+  padding: 22px 0 6px; min-height: 210px;
+  perspective: 1200px;
+}
+
+.card {
+  position: relative;
+  width: 148px; height: 196px;
+  /* The fan only overlaps once there are enough cards to need it. With two in
+     hand, overlapping just hid half of one card's text. */
+  margin: 0 var(--overlap, 0px);
+  border-radius: 9px;
+  border: 1px solid var(--stone-900);
+  background: linear-gradient(180deg, var(--parchment), var(--parchment-2));
+  color: var(--card-ink);
+  box-shadow: var(--shadow-card);
+  padding: 15px 12px 12px;
+  text-align: left;
+  transform: rotate(var(--rot, 0deg)) translateY(var(--ty, 0px));
+  transform-origin: 50% 130%;
+  transition: transform var(--t-mid) var(--ease), box-shadow var(--t-mid) var(--ease);
+}
+.card:hover, .card:focus-visible {
+  transform: translateY(-30px) scale(1.07) rotate(0deg);
+  z-index: 5;
+  margin: 0 6px;
+  box-shadow: 0 22px 44px rgba(0, 0, 0, .6);
+}
+.card[aria-disabled='true'] { filter: saturate(.35) brightness(.72); }
+.card[aria-disabled='true']:hover { transform: rotate(var(--rot, 0deg)) translateY(-6px); }
+
+/* The type band is the Slay the Spire read: attack / skill / power at a glance,
+   before you have read a word of the card. */
+.card .band {
+  position: absolute; left: 0; right: 0; top: 0; height: 5px;
+  border-radius: 9px 9px 0 0;
+  background: var(--band, var(--muted));
+}
+.card.t-attack { --band: #b3402f; }
+.card.t-skill { --band: #3f6f92; }
+.card.t-power { --band: #7a5aa8; }
+
+.card .cost {
+  position: absolute; top: -12px; left: -12px;
+  width: 34px; height: 34px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: radial-gradient(circle at 34% 30%, #4a4038, #16120f);
+  border: 2px solid var(--ember);
+  color: var(--ink);
+  font-family: var(--font-mono); font-size: 15px; font-weight: 500;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .5);
+}
+
+.card .notch {
+  position: absolute; top: 9px; right: 9px;
+  width: 10px; height: 10px; transform: rotate(45deg);
+  border: 1.5px solid var(--card-ink);
+}
+.card.r-uncommon .notch { background: #3f6f92; border-color: #3f6f92; }
+.card.r-rare .notch { background: var(--gold); border-color: var(--gold); }
+
+.card .title {
+  display: block;
+  font-family: var(--font-display); font-weight: 600;
+  font-size: 15px; line-height: 1.16; margin: 10px 0 6px;
+}
+.card .body {
+  display: block;
+  font-size: 12.5px; line-height: 1.34;
+  /* Card text is a fixed budget. Anything longer belongs on the hover preview,
+     not spilling over the frame. */
+  max-height: 88px; overflow: hidden;
+}
+.card .foot {
+  position: absolute; left: 12px; right: 12px; bottom: 10px;
+  font-family: var(--font-ui); font-size: 10px; color: #5f5443;
+  display: flex; justify-content: space-between; gap: 6px;
+}
+.card .key {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+  font-family: var(--font-mono); font-size: 10px; color: #6b5f4d;
+  border: 1px solid #b9a887; border-radius: 3px; padding: 0 5px;
+  line-height: 1.5;
+}
+
+/* Cards that are legal but unaffordable, or illegal here, sit on a bench.
+   Deliberately not card-shaped, so nobody mistakes them for something playable —
+   but visible, because knowing what you are missing is part of solving a turn. */
+.bench {
+  display: flex; flex-wrap: wrap; gap: 7px; justify-content: center;
+  margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line);
+}
+.bench-chip {
+  font-family: var(--font-ui); font-size: 11.5px;
+  color: var(--muted);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 4px 10px; background: var(--surface-2);
+}
+
+/* ---------------------------------------------------------------- reward -- */
+
+/* reward.md inverts normal upgrade-shop UI on purpose: Skip owns the hero
+   region, is focused on entry, and is never styled as the disabled option. */
+.skip-hero {
+  display: block; width: 100%;
+  border: 2px solid var(--moss);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--moss) 14%, var(--surface));
+  padding: 22px 20px;
+  text-align: left;
+}
+.skip-hero:hover { box-shadow: var(--shadow-2); }
+.skip-kicker {
+  font-family: var(--font-ui); font-size: 11px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--moss-text);
+}
+.skip-main { font-family: var(--font-display); font-size: 29px; font-weight: 700; margin: 4px 0 8px; }
+.skip-payout {
+  display: inline-block; font-family: var(--font-ui); font-size: 12px; font-weight: 600;
+  background: var(--moss); color: var(--stone-900);
+  border-radius: 999px; padding: 3px 11px;
+}
+.offers { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 20px; }
+.offers .card { margin: 0; transform: none; }
+.offers .card:hover, .offers .card:focus-visible { transform: translateY(-8px) scale(1.03); }
+.offers-label {
+  font-family: var(--font-ui); font-size: 11px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted); margin-top: 22px;
+}
+
+/* -------------------------------------------------------- lists & shelves -- */
+
+.shelf { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.entity {
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface-2); padding: 9px 12px;
+  font-size: 13.5px;
+}
+.sil { flex: 0 0 auto; width: 26px; height: 26px; display: grid; place-items: center; }
+
+/* One silhouette per object kind, per ENTITY_STANDARDS. Greyscale-legible. */
+.sil.relic { border: 3px solid var(--gold); border-radius: 50%; }
+.sil.power { background: var(--facet-campfire); clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%); }
+.sil.potion { background: var(--steel); clip-path: polygon(12% 0, 88% 0, 62% 46%, 62% 100%, 38% 100%, 38% 46%); }
+.sil.curse { border: 2px dashed var(--blood); clip-path: polygon(0 0, 100% 0, 100% 88%, 92% 100%, 0 100%); }
+.sil.card-sil { border: 2px solid var(--ink-soft); border-radius: 3px; width: 19px; height: 26px; }
+
+.entity .nm { font-weight: 500; }
+.entity .dt { color: var(--muted); font-size: 12.5px; }
+
+.badge {
+  display: flex; gap: 12px; align-items: flex-start;
+  border: 1px solid var(--gold); border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--gold) 10%, var(--surface));
+  padding: 14px 16px;
+}
+.badge .star { color: var(--gold); font-size: 20px; line-height: 1; }
+.badge .nm { font-family: var(--font-display); font-weight: 600; font-size: 17px; }
+.badge .bl { color: var(--ink-soft); font-size: 13.5px; }
+
+.log {
+  margin-top: 16px; font-family: var(--font-mono); font-size: 12px;
+  color: var(--muted); border-top: 1px solid var(--line-soft); padding-top: 10px;
+}
+.log div { padding: 2px 0; }
+
+.choice {
+  display: block; width: 100%; text-align: left;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface-2); padding: 12px 14px; margin-bottom: 9px;
+}
+.choice:hover { border-color: var(--facet); }
+.choice.greedy { border-color: var(--blood); }
+.choice .lb { font-weight: 600; }
+.choice .cq { color: var(--muted); font-size: 13px; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  background: var(--stone-900); color: var(--ink);
+  border: 1px solid var(--ember); border-radius: 999px;
+  padding: 8px 18px; font-family: var(--font-ui); font-size: 13px;
+  box-shadow: var(--shadow-2); z-index: 50;
+}
+
+/* Room clear gets one beat, and it is distinct from fleeing. */
+.fanfare {
+  position: fixed; inset: 0; display: grid; place-items: center;
+  background: rgba(0, 0, 0, .55); z-index: 60; pointer-events: none;
+}
+.fanfare .stamp {
+  font-family: var(--font-display); font-weight: 700; font-size: 52px;
+  letter-spacing: .06em; color: var(--ember-hot);
+  text-shadow: 0 4px 30px rgba(0, 0, 0, .8);
+  animation: stamp 640ms var(--ease) both;
+}
+
+.status {
+  font-family: var(--font-ui); font-size: 11.5px; color: var(--muted);
+  margin-top: 18px; padding-top: 10px; border-top: 1px solid var(--line-soft);
+  display: flex; gap: 14px; flex-wrap: wrap;
+}
+.status .dot-on { color: var(--moss-text); }
+.status .dot-off { color: var(--muted); }
+
+.kbd {
+  font-family: var(--font-mono); font-size: 10.5px;
+  border: 1px solid var(--line); border-bottom-width: 2px;
+  border-radius: 3px; padding: 0 4px; color: var(--ink-soft);
+}
+
+/* -------------------------------------------------------------- keyframes -- */
+
+@keyframes screen-in {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes intent-reveal {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes card-commit {
+  0% { transform: translateY(0) scale(1); opacity: 1; }
+  55% { transform: translateY(-90px) scale(1.05); opacity: 1; }
+  100% { transform: translateY(-150px) scale(.9); opacity: 0; }
+}
+@keyframes stamp {
+  0% { opacity: 0; transform: scale(1.5) rotate(-6deg); }
+  40% { opacity: 1; transform: scale(1) rotate(-3deg); }
+  100% { opacity: 0; transform: scale(1.02) rotate(-3deg); }
+}
+
+.committing { animation: card-commit 380ms var(--ease) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+  .card:hover, .card:focus-visible { transform: none; }
+  .mnode.legal:hover { transform: translate(-50%, -50%); }
+}
+
+@media (max-width: 620px) {
+  .wordmark { font-size: 17px; }
+  .tagline { display: none; }
+  .card { width: 124px; height: 172px; }
+  .hero-title { font-size: 27px; }
+  .skip-main { font-size: 24px; }
+}

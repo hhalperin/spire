@@ -230,3 +230,10 @@ __marimo__/
 # them so a half-migrated checkout stays clean.
 .claude/deck-builder-state.json
 .claude/deck-pending-reward.json
+
+# spire's Rust server
+server/target/
+server/dist/
+
+# Dev tooling for the client (tools/). Not a runtime dependency of the plugin.
+node_modules/

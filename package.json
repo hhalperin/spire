@@ -1,0 +1,14 @@
+{
+  "name": "spire-tools",
+  "private": true,
+  "type": "module",
+  "description": "Dev-only tooling for the spire client: bundle the app, run a demo host, shoot screenshots. Nothing here is a runtime dependency of the plugin.",
+  "scripts": {
+    "build:app": "node tools/build-app.mjs",
+    "host": "node tools/host/serve.mjs",
+    "shoot": "node tools/shoot.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}
