@@ -1,0 +1,240 @@
+{
+  "_comment": "Rooms as enemies. Lifted out of design/spire-ai/ui/demo/demo.js, which held them inline and was convicted for it by ENTITY_STANDARDS.md rule 8. Every entry needs a checkable acceptance; a room whose clear condition is a human judgement call is an event, not a fight. Intents carry an explicit `sensor` naming the deterministic check that produces them — an intent with no sensor is a guess dressed as a telegraph, which sts-fidelity.md refuses. `clear_at` is a per-room progress target, deliberately not `max_hp`: nothing here is a health bar.",
+
+  "intent_kinds": {
+    "_comment": "The Slay the Spire 2 intent vocabulary, ported. `tier` scales the attack glyph 1-5 the way StS2 scales dagger through scythe. Attack shows an exact count because partial information tested worse than either extreme — see sts-fidelity.md Part 3.",
+    "attack": {"glyph": "⚔", "shows": "exact_count", "tone": "danger"},
+    "defend": {"glyph": "⛨", "shows": "none", "tone": "muted"},
+    "buff": {"glyph": "↑", "shows": "none", "tone": "warn"},
+    "debuff": {"glyph": "↓", "shows": "none", "tone": "danger"},
+    "status": {"glyph": "⬚", "shows": "count", "tone": "warn"},
+    "affliction": {"glyph": "▧", "shows": "count", "tone": "warn"},
+    "heal": {"glyph": "+", "shows": "none", "tone": "safe"},
+    "summon": {"glyph": "◉", "shows": "count", "tone": "danger"},
+    "deathblow": {"glyph": "☠", "shows": "none", "tone": "danger"},
+    "cowardly": {"glyph": "↷", "shows": "none", "tone": "muted"},
+    "stunned": {"glyph": "✳", "shows": "none", "tone": "muted"},
+    "sleeping": {"glyph": "z", "shows": "count", "tone": "muted"},
+    "unknown": {"glyph": "?", "shows": "none", "tone": "muted"}
+  },
+
+  "monster": [
+    {
+      "id": "nit-cluster",
+      "name": "Nit Cluster",
+      "room": "refactor",
+      "clear_at": 2,
+      "telegraph": "bikeshed swarm",
+      "blurb": "Clear by fixing the nits mechanically and separating the real note.",
+      "acceptance": {"type": "command", "cmd": "lint", "expect": "exit_0"},
+      "intents": [
+        {"kind": "attack", "tier": 1, "sensor": "lint_errors",
+         "text": "Will bury the real review comment under twelve style nits."}
+      ],
+      "turn_effect": "Three more nits arrive on the same file."
+    },
+    {
+      "id": "regression-bug",
+      "name": "Regression Bug",
+      "room": "bug",
+      "clear_at": 3,
+      "telegraph": "it came back",
+      "blurb": "Clear by pinning it with a failing test, then fixing the cause.",
+      "acceptance": {"type": "command", "cmd": "test", "expect": "exit_0"},
+      "intents": [
+        {"kind": "attack", "tier": 3, "sensor": "tests_failing",
+         "text": "Will reappear next release if you patch the symptom."}
+      ],
+      "turn_effect": "The bug reproduces on a second code path."
+    },
+    {
+      "id": "missing-test",
+      "name": "Missing Test",
+      "room": "bug",
+      "clear_at": 2,
+      "telegraph": "silent breakage",
+      "blurb": "Clear by covering the untested branch.",
+      "acceptance": {"type": "command", "cmd": "test", "expect": "no_coverage_regression"},
+      "intents": [
+        {"kind": "debuff", "sensor": "coverage_drop",
+         "text": "Will let the next change break silently."}
+      ],
+      "turn_effect": "Another untested branch appears."
+    },
+    {
+      "id": "dependency-bump",
+      "name": "Dependency Bump",
+      "room": "infra",
+      "clear_at": 3,
+      "telegraph": "transitive break",
+      "blurb": "Clear by pinning the version and recording why.",
+      "acceptance": {"type": "command", "cmd": "test", "expect": "exit_0"},
+      "intents": [
+        {"kind": "attack", "tier": 2, "sensor": "tests_failing",
+         "text": "Will break the build in a transitive package you do not own."},
+        {"kind": "status", "count": 1, "sensor": "diff_src_no_tests",
+         "text": "Shuffles a lockfile churn card into the next room."}
+      ],
+      "turn_effect": "A peer dependency warning turns into an error."
+    },
+    {
+      "id": "stale-doc",
+      "name": "Stale Doc",
+      "room": "docs",
+      "clear_at": 2,
+      "telegraph": "the README lies",
+      "blurb": "Clear by making the written steps match the shipped behaviour.",
+      "acceptance": {"type": "file_exists", "path": "README.md", "expect": "run_steps_match"},
+      "intents": [
+        {"kind": "debuff", "sensor": "todo_density",
+         "text": "Will cost the next reader an hour rediscovering what changed."}
+      ],
+      "turn_effect": "Someone follows the old steps and files a bug."
+    },
+    {
+      "id": "widening-interface",
+      "name": "Widening Interface",
+      "room": "refactor",
+      "clear_at": 3,
+      "telegraph": "one more optional arg",
+      "blurb": "Clear by narrowing the signature and migrating the callers.",
+      "acceptance": {"type": "command", "cmd": "lint", "expect": "exit_0"},
+      "intents": [
+        {"kind": "attack", "tier": 2, "sensor": "lint_errors",
+         "text": "Will grow a fourth optional argument before the week is out."}
+      ],
+      "turn_effect": "A new caller passes the flag positionally."
+    },
+    {
+      "id": "unowned-todo",
+      "name": "Unowned TODO",
+      "room": "orient",
+      "clear_at": 1,
+      "telegraph": "no name attached",
+      "blurb": "Clear by naming the owner or deleting the note.",
+      "acceptance": {"type": "decision_recorded", "expect": "owner_named"},
+      "intents": [],
+      "turn_effect": "Two more TODOs appear beside it."
+    },
+    {
+      "id": "slow-endpoint",
+      "name": "Slow Endpoint",
+      "room": "feature",
+      "clear_at": 3,
+      "telegraph": "p99 creeping",
+      "blurb": "Clear by measuring first, then removing the one hot call.",
+      "acceptance": {"type": "command", "cmd": "test", "expect": "exit_0"},
+      "intents": [
+        {"kind": "unknown", "sensor": null,
+         "text": "No profiler has run here yet."}
+      ],
+      "turn_effect": "A second caller starts hitting the same path."
+    },
+    {
+      "id": "config-drift",
+      "name": "Config Drift",
+      "room": "infra",
+      "clear_at": 2,
+      "telegraph": "works on staging",
+      "blurb": "Clear by making the environments describe themselves in one place.",
+      "acceptance": {"type": "file_exists", "path": null, "expect": "single_source_of_config"},
+      "intents": [
+        {"kind": "debuff", "sensor": "infra_files_touched",
+         "text": "Will make the next deploy behave differently than the last."}
+      ],
+      "turn_effect": "A third environment gains its own override."
+    },
+    {
+      "id": "undefined-done",
+      "name": "Undefined Done",
+      "room": "design",
+      "clear_at": 2,
+      "telegraph": "nobody wrote it down",
+      "blurb": "Clear by writing Done as a sentence someone could check.",
+      "acceptance": {"type": "decision_recorded", "expect": "done_written"},
+      "intents": [],
+      "turn_effect": "A new must-have is remembered aloud."
+    }
+  ],
+
+  "elite": [
+    {
+      "id": "flaky-suite",
+      "name": "Flaky Suite",
+      "room": "bug",
+      "clear_at": 4,
+      "telegraph": "CI roulette",
+      "blurb": "Clear by stabilizing the suite, not by quarantining tests.",
+      "acceptance": {"type": "command", "cmd": "test", "expect": "exit_0", "repeat": 3},
+      "intents": [
+        {"kind": "attack", "tier": 4, "sensor": "tests_failing",
+         "text": "Will fail CI randomly if ignored."},
+        {"kind": "buff", "sensor": "diff_test_churn",
+         "text": "Gets harder to reproduce the longer it runs."}
+      ],
+      "turn_effect": "A red test blinks green and hides itself."
+    },
+    {
+      "id": "duplication-hydra",
+      "name": "Duplication Hydra",
+      "room": "refactor",
+      "clear_at": 4,
+      "telegraph": "copy three appears",
+      "blurb": "Clear by collapsing the copies behind one caller.",
+      "acceptance": {"type": "command", "cmd": "lint", "expect": "exit_0"},
+      "intents": [
+        {"kind": "attack", "tier": 3, "sensor": "lint_errors",
+         "text": "Will grow a third copy while you edit the second."},
+        {"kind": "summon", "count": 1, "sensor": "todo_density",
+         "text": "Spawns a fourth copy in a module you have not opened."}
+      ],
+      "turn_effect": "Someone copies the block into a new module."
+    },
+    {
+      "id": "auth-hole",
+      "name": "The Auth Hole",
+      "room": "bug",
+      "clear_at": 5,
+      "telegraph": "unauthenticated path",
+      "blurb": "Clear by closing the path and adding the regression test that proves it.",
+      "acceptance": {"type": "command", "cmd": "test", "expect": "exit_0"},
+      "intents": [
+        {"kind": "attack", "tier": 5, "sensor": "tests_failing",
+         "text": "Will stay open in production until a test names it."},
+        {"kind": "debuff", "sensor": "coverage_drop",
+         "text": "Every adjacent route inherits the same gap."}
+      ],
+      "turn_effect": "A second route is found sharing the middleware."
+    },
+    {
+      "id": "perf-cliff",
+      "name": "Perf Cliff",
+      "room": "infra",
+      "clear_at": 4,
+      "telegraph": "fine until it isn't",
+      "blurb": "Clear by finding the size where it falls over and bounding it.",
+      "acceptance": {"type": "command", "cmd": "test", "expect": "exit_0"},
+      "intents": [
+        {"kind": "unknown", "sensor": null,
+         "text": "Nothing measures this yet."}
+      ],
+      "turn_effect": "Load doubles and the margin disappears."
+    },
+    {
+      "id": "half-migration",
+      "name": "The Half Migration",
+      "room": "infra",
+      "clear_at": 5,
+      "telegraph": "two shapes, one table",
+      "blurb": "Clear by finishing the migration or rolling it back — not by living in both.",
+      "acceptance": {"type": "command", "cmd": "test", "expect": "exit_0"},
+      "intents": [
+        {"kind": "attack", "tier": 4, "sensor": "tests_failing",
+         "text": "Will strand every reader between the old shape and the new one."},
+        {"kind": "affliction", "count": 1, "sensor": "infra_files_touched",
+         "text": "Marks one card in your deck as unsafe to play here."}
+      ],
+      "turn_effect": "A read path is found that only understands the old shape."
+    }
+  ]
+}
