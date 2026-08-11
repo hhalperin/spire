@@ -1,0 +1,181 @@
+/* The scene layer stack.
+ *
+ * Silhouette comes from app/scene.js as SVG; atmosphere lives here, because a
+ * gradient needs no geometry and because this is where the theme tokens are. The
+ * composer only tells this stylesheet where the light is — everything else is
+ * derived, which is how both themes come free.
+ *
+ * This replaces `body::before`, which was the entire atmosphere layer before:
+ * one facet-tinted radial. That pool survives as `.sc-glow`, so the screen still
+ * has one warm source and DESIGN_SYSTEM's rule still holds.
+ */
+
+:root {
+  /* The two poles every silhouette is mixed between. `--sc-form` is the
+     direction "toward legibility", which is lighter on stone and darker on
+     paper — so the composer never has to know which theme it is in. */
+  --sc-void: var(--stone-900);
+  --sc-form: #6f6255;
+
+  --sc-tint: var(--steel);
+  --sc-tint-pct: 10%;
+
+  --sc-light-x: 50%;
+  --sc-light-y: 4%;
+  --sc-light-spread: 1;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    --sc-form: #6b645c;
+  }
+}
+:root[data-theme='light'] { --sc-form: #6b645c; }
+
+/* ------------------------------------------------------------------ stack -- */
+
+#scene {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  /* The biome tint is mixed into the ground once, here, so every layer above
+     inherits a world rather than each one re-deriving it. */
+  background: color-mix(in srgb, var(--sc-tint) var(--sc-tint-pct), var(--sc-void));
+}
+
+#scene > * {
+  position: absolute;
+  inset: 0;
+}
+
+.scene-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Atmosphere layers, in stack order. Each is a single element with no geometry;
+   `has-*` classes come from the scene's declared layer list, so a scene that
+   does not use a layer genuinely does not paint it. */
+
+.sc-haze,
+.sc-shaft,
+.sc-glow,
+.sc-vignette {
+  display: none;
+}
+
+#scene.has-haze .sc-haze { display: block; }
+#scene.has-shaft .sc-shaft { display: block; }
+#scene.has-glow .sc-glow { display: block; }
+#scene.has-vignette .sc-vignette { display: block; }
+
+/* Fog between far and mid. Sits low and wide — its job is to detach the distance
+   from the architecture, not to be visible in itself. */
+.sc-haze {
+  background: linear-gradient(
+    180deg,
+    transparent 28%,
+    color-mix(in srgb, var(--sc-form) 5%, transparent) 52%,
+    transparent 76%
+  );
+}
+
+/* The one warm source, thrown from wherever the scene put it. Two cones rather
+   than one so the light has a direction instead of being a blob. */
+.sc-shaft {
+  background:
+    radial-gradient(
+      calc(46% * var(--sc-light-spread)) calc(62% * var(--sc-light-spread))
+      at var(--sc-light-x) var(--sc-light-y),
+      color-mix(in srgb, var(--facet) 9%, transparent),
+      transparent 70%
+    );
+  mix-blend-mode: screen;
+}
+
+:root[data-theme='light'] .sc-shaft,
+:root:not([data-theme='dark']) .sc-shaft {
+  /* Screen blending on paper turns the shaft into a white smear. On light the
+     same light reads as a soft warm wash instead. */
+  mix-blend-mode: multiply;
+  background: radial-gradient(
+    calc(46% * var(--sc-light-spread)) calc(62% * var(--sc-light-spread))
+    at var(--sc-light-x) var(--sc-light-y),
+    color-mix(in srgb, var(--facet) 7%, transparent),
+    transparent 70%
+  );
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .sc-shaft { mix-blend-mode: screen; }
+}
+
+/* The torch pool. This is the old body::before, kept. */
+.sc-glow {
+  background:
+    radial-gradient(120% 70% at var(--sc-light-x) calc(var(--sc-light-y) - 12%),
+      color-mix(in srgb, var(--facet) 20%, transparent), transparent 62%);
+}
+
+/* The frame. Pulls the corners down so the content column reads as lit. */
+.sc-vignette {
+  background:
+    radial-gradient(120% 96% at 50% 42%, transparent 46%, rgba(0, 0, 0, .42) 100%),
+    linear-gradient(180deg, transparent 62%, rgba(0, 0, 0, .34) 100%);
+}
+
+:root[data-theme='light'] .sc-vignette {
+  background:
+    radial-gradient(120% 96% at 50% 42%, transparent 52%, rgba(28, 25, 22, .12) 100%);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) .sc-vignette {
+    background:
+      radial-gradient(120% 96% at 50% 42%, transparent 52%, rgba(28, 25, 22, .12) 100%);
+  }
+}
+
+/* A scene change is a cut, not a crossfade — the facet tint already animates and
+   two things easing at once reads as lag. The one transition here is the light
+   moving, which sells the change of place. */
+#scene { transition: background var(--t-slow) var(--ease); }
+.sc-shaft, .sc-glow { transition: background var(--t-slow) var(--ease); }
+
+@media (prefers-reduced-motion: reduce) {
+  #scene, .sc-shaft, .sc-glow { transition: none; }
+}
+
+/* -------------------------------------------------------------- wireframe -- */
+
+/* The labelled view, used by tools/scenes.mjs. It lives here rather than in the
+   tool so that what the wireframe draws and what the composer draws are governed
+   by one stylesheet — the whole point of the JSON being the source. */
+
+#scene.wireframe { background: var(--sc-void); }
+#scene.wireframe .scene-svg path { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+
+.sc-zone {
+  position: absolute;
+  border: 1px solid color-mix(in srgb, var(--facet) 70%, transparent);
+  font: 10px/1.4 var(--font-mono, monospace);
+  color: var(--facet);
+  padding: 2px 4px;
+}
+
+/* The same 45-degree hatch the low-fi wireframes have used since the beginning
+   (design/spire-ai/ui/wireframes/wireframe.css). Reused rather than reinvented so
+   "this region is a placeholder" looks the same everywhere in the project. */
+.sc-safe {
+  position: absolute;
+  border: 1px dashed var(--moss);
+  background: repeating-linear-gradient(
+    -45deg, transparent, transparent 6px,
+    color-mix(in srgb, var(--moss) 16%, transparent) 6px,
+    color-mix(in srgb, var(--moss) 16%, transparent) 12px
+  );
+  font: 10px/1.4 var(--font-mono, monospace);
+  color: var(--moss-text);
+  padding: 2px 4px;
+}

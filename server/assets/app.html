@@ -48,6 +48,190 @@
 
 </style>
   <style>
+/* The scene layer stack.
+ *
+ * Silhouette comes from app/scene.js as SVG; atmosphere lives here, because a
+ * gradient needs no geometry and because this is where the theme tokens are. The
+ * composer only tells this stylesheet where the light is — everything else is
+ * derived, which is how both themes come free.
+ *
+ * This replaces `body::before`, which was the entire atmosphere layer before:
+ * one facet-tinted radial. That pool survives as `.sc-glow`, so the screen still
+ * has one warm source and DESIGN_SYSTEM's rule still holds.
+ */
+
+:root {
+  /* The two poles every silhouette is mixed between. `--sc-form` is the
+     direction "toward legibility", which is lighter on stone and darker on
+     paper — so the composer never has to know which theme it is in. */
+  --sc-void: var(--stone-900);
+  --sc-form: #6f6255;
+
+  --sc-tint: var(--steel);
+  --sc-tint-pct: 10%;
+
+  --sc-light-x: 50%;
+  --sc-light-y: 4%;
+  --sc-light-spread: 1;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    --sc-form: #6b645c;
+  }
+}
+:root[data-theme='light'] { --sc-form: #6b645c; }
+
+/* ------------------------------------------------------------------ stack -- */
+
+#scene {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  /* The biome tint is mixed into the ground once, here, so every layer above
+     inherits a world rather than each one re-deriving it. */
+  background: color-mix(in srgb, var(--sc-tint) var(--sc-tint-pct), var(--sc-void));
+}
+
+#scene > * {
+  position: absolute;
+  inset: 0;
+}
+
+.scene-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Atmosphere layers, in stack order. Each is a single element with no geometry;
+   `has-*` classes come from the scene's declared layer list, so a scene that
+   does not use a layer genuinely does not paint it. */
+
+.sc-haze,
+.sc-shaft,
+.sc-glow,
+.sc-vignette {
+  display: none;
+}
+
+#scene.has-haze .sc-haze { display: block; }
+#scene.has-shaft .sc-shaft { display: block; }
+#scene.has-glow .sc-glow { display: block; }
+#scene.has-vignette .sc-vignette { display: block; }
+
+/* Fog between far and mid. Sits low and wide — its job is to detach the distance
+   from the architecture, not to be visible in itself. */
+.sc-haze {
+  background: linear-gradient(
+    180deg,
+    transparent 28%,
+    color-mix(in srgb, var(--sc-form) 5%, transparent) 52%,
+    transparent 76%
+  );
+}
+
+/* The one warm source, thrown from wherever the scene put it. Two cones rather
+   than one so the light has a direction instead of being a blob. */
+.sc-shaft {
+  background:
+    radial-gradient(
+      calc(46% * var(--sc-light-spread)) calc(62% * var(--sc-light-spread))
+      at var(--sc-light-x) var(--sc-light-y),
+      color-mix(in srgb, var(--facet) 9%, transparent),
+      transparent 70%
+    );
+  mix-blend-mode: screen;
+}
+
+:root[data-theme='light'] .sc-shaft,
+:root:not([data-theme='dark']) .sc-shaft {
+  /* Screen blending on paper turns the shaft into a white smear. On light the
+     same light reads as a soft warm wash instead. */
+  mix-blend-mode: multiply;
+  background: radial-gradient(
+    calc(46% * var(--sc-light-spread)) calc(62% * var(--sc-light-spread))
+    at var(--sc-light-x) var(--sc-light-y),
+    color-mix(in srgb, var(--facet) 7%, transparent),
+    transparent 70%
+  );
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .sc-shaft { mix-blend-mode: screen; }
+}
+
+/* The torch pool. This is the old body::before, kept. */
+.sc-glow {
+  background:
+    radial-gradient(120% 70% at var(--sc-light-x) calc(var(--sc-light-y) - 12%),
+      color-mix(in srgb, var(--facet) 20%, transparent), transparent 62%);
+}
+
+/* The frame. Pulls the corners down so the content column reads as lit. */
+.sc-vignette {
+  background:
+    radial-gradient(120% 96% at 50% 42%, transparent 46%, rgba(0, 0, 0, .42) 100%),
+    linear-gradient(180deg, transparent 62%, rgba(0, 0, 0, .34) 100%);
+}
+
+:root[data-theme='light'] .sc-vignette {
+  background:
+    radial-gradient(120% 96% at 50% 42%, transparent 52%, rgba(28, 25, 22, .12) 100%);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) .sc-vignette {
+    background:
+      radial-gradient(120% 96% at 50% 42%, transparent 52%, rgba(28, 25, 22, .12) 100%);
+  }
+}
+
+/* A scene change is a cut, not a crossfade — the facet tint already animates and
+   two things easing at once reads as lag. The one transition here is the light
+   moving, which sells the change of place. */
+#scene { transition: background var(--t-slow) var(--ease); }
+.sc-shaft, .sc-glow { transition: background var(--t-slow) var(--ease); }
+
+@media (prefers-reduced-motion: reduce) {
+  #scene, .sc-shaft, .sc-glow { transition: none; }
+}
+
+/* -------------------------------------------------------------- wireframe -- */
+
+/* The labelled view, used by tools/scenes.mjs. It lives here rather than in the
+   tool so that what the wireframe draws and what the composer draws are governed
+   by one stylesheet — the whole point of the JSON being the source. */
+
+#scene.wireframe { background: var(--sc-void); }
+#scene.wireframe .scene-svg path { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+
+.sc-zone {
+  position: absolute;
+  border: 1px solid color-mix(in srgb, var(--facet) 70%, transparent);
+  font: 10px/1.4 var(--font-mono, monospace);
+  color: var(--facet);
+  padding: 2px 4px;
+}
+
+/* The same 45-degree hatch the low-fi wireframes have used since the beginning
+   (design/spire-ai/ui/wireframes/wireframe.css). Reused rather than reinvented so
+   "this region is a placeholder" looks the same everywhere in the project. */
+.sc-safe {
+  position: absolute;
+  border: 1px dashed var(--moss);
+  background: repeating-linear-gradient(
+    -45deg, transparent, transparent 6px,
+    color-mix(in srgb, var(--moss) 16%, transparent) 6px,
+    color-mix(in srgb, var(--moss) 16%, transparent) 12px
+  );
+  font: 10px/1.4 var(--font-mono, monospace);
+  color: var(--moss-text);
+  padding: 2px 4px;
+}
+
+  </style>
+  <style>
 /* Spire — the client stylesheet.
  *
  * Dark is the default here, which is a reversal. design/spire-ai/ui/DESIGN_SYSTEM.md
@@ -59,10 +243,13 @@
  *
  * What survives from v0 unchanged, because it was right:
  *   - one accent at a time (facet accent OR class accent, never both competing)
- *   - geometry over gradients
  *   - a motion budget of 2-3 beats per facet, and no continuous glow
  *   - silhouette before colour: every entity is identifiable in greyscale
  *   - Skip is never styled as the disabled option
+ *
+ * "Geometry over gradients" survives amended rather than intact: structure is
+ * always geometry, and gradients carry depth and light only, never form. The
+ * amendment is recorded in DESIGN_SYSTEM.md; scene.css is where it is spent.
  *
  * Theme resolution is three-state on purpose. An MCP App host sends
  * hostContext.theme, which lands on [data-theme]; with no host, prefers-color-scheme
@@ -256,20 +443,11 @@ body {
   min-height: 100vh;
 }
 
-/* The torchlight. One warm pool at the top of the shaft, tinted to whatever
-   facet you are in — this is what stops the page reading as a document. */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background:
-    radial-gradient(120% 70% at 50% -12%,
-      color-mix(in srgb, var(--facet) 22%, transparent), transparent 62%),
-    radial-gradient(90% 60% at 50% 115%, rgba(0, 0, 0, .55), transparent 60%);
-  transition: background var(--t-slow) var(--ease);
-}
+/* The torchlight used to live here as body::before — one facet-tinted radial,
+   the whole atmosphere the client had. It now lives in scene.css as `.sc-glow`,
+   one layer of a nine-layer stack, so the warm pool can move with the scene
+   instead of always coming from the top of the page. Same light, same rule:
+   one warm source, no continuous glow. */
 
 button { font: inherit; color: inherit; cursor: pointer; }
 button:focus-visible, [tabindex]:focus-visible {
@@ -935,6 +1113,17 @@ button:focus-visible, [tabindex]:focus-visible {
   </style>
 </head>
 <body>
+  <!-- The scene. Silhouette layers are inserted here by app/scene.js; the
+       atmosphere layers are static elements the stylesheet paints. Sits at
+       z-index 0, behind .shell, and is aria-hidden because it carries no
+       information a screen reader could use. -->
+  <div id="scene" aria-hidden="true">
+    <div class="sc-haze"></div>
+    <div class="sc-shaft"></div>
+    <div class="sc-glow"></div>
+    <div class="sc-vignette"></div>
+  </div>
+
   <div class="shell">
     <header class="topbar">
       <span class="wordmark">SPIRE</span>
@@ -953,6 +1142,423 @@ button:focus-visible, [tabindex]:focus-visible {
   </div>
 
   <script type="module">
+/* ---- content/scenes.json ---- */
+const SPIRE_SCENES = {
+  "_comment": "Scene wireframes. This file is not documentation about the backgrounds — it IS the backgrounds: app/scene.js reads it at runtime and tools/scenes.mjs draws the labelled wireframe from the same data, so the spec cannot drift from the art. Coordinates are normalised 0..1 (x right, y down) so a scene is resolution-independent. Nothing here names a colour; biomes tint tokens that already flip with the theme, which is how the paper theme comes free.",
+
+  "version": 1,
+
+  "roll_budget": {
+    "_comment": "The client has no RNG. Following scripts/mapgen.py's `unknown_rolls`, the engine pre-rolls a float vector and the composer walks it in declared order. Every grammar entry consumes a FIXED slice — `2 + components[component].rolls * count_max`: an appear roll, a count roll, then each possible instance's worth — whether or not it uses all of it. Consuming a fixed slice is what stops one entry's dice from shifting every entry after it, and the composer will not read outside its slice even when a builder asks for more. There is deliberately no total here: the length a scene needs follows from its grammar and from `components.*.rolls`, so `mapgen.scene_budget` derives it rather than anyone maintaining a number that can silently disagree with what eighteen path builders actually draw. The first version of this file did maintain one, and shipped 96 floats to a scene that walked 170 — deterministic, so nothing looked broken, and quietly repeating itself.",
+    "per_entry_formula": "2 + components[component].rolls * count_max"
+  },
+
+  "contrast": {
+    "_comment": "The mechanism that makes this readable, and the one worth understanding. In a text-dense UI the content covers nearly the whole frame, so a background cannot be kept legible by drawing *around* the text — there is nowhere to draw. It is kept legible by bounding how loud it is allowed to be. Every silhouette layer declares `max_delta`, the furthest it may step away from the void in luminance; depth comes from the ordering of those steps, not from their size. Inside a safe rectangle the composer multiplies the step by `safe_attenuation`, so a shape passing behind a paragraph fades rather than being clipped. tools/shoot.mjs samples real pixels to check the result; these numbers are what the composer aims at.",
+    "safe_attenuation": 0.4,
+    "legibility_ceiling": 0.26
+  },
+
+  "layers": [
+    {"id": "void", "kind": "atmosphere", "z": 0, "max_delta": 0.0, "carries": "The depth of the shaft behind everything."},
+    {"id": "far", "kind": "silhouette", "z": 1, "max_delta": 0.07, "carries": "Distant crags, towers, the spire's own body."},
+    {"id": "haze", "kind": "atmosphere", "z": 2, "max_delta": 0.05, "carries": "The fog band that separates far from mid."},
+    {"id": "mid", "kind": "silhouette", "z": 3, "max_delta": 0.15, "carries": "The architecture you are standing in."},
+    {"id": "shaft", "kind": "atmosphere", "z": 4, "max_delta": 0.09, "carries": "Light from the one warm source."},
+    {"id": "near", "kind": "silhouette", "z": 5, "max_delta": 0.24, "carries": "Foreground framing: pillar edges, chains, roots."},
+    {"id": "floor", "kind": "silhouette", "z": 6, "max_delta": 0.19, "carries": "The ground plane the content sits on."},
+    {"id": "glow", "kind": "atmosphere", "z": 7, "max_delta": 0.12, "carries": "The torch pool. Absorbs the old body::before."},
+    {"id": "vignette", "kind": "atmosphere", "z": 8, "max_delta": 0.22, "carries": "The darkening frame."}
+  ],
+
+  "bands": {
+    "_comment": "Shared zone vocabulary. The content column is capped at 1080px and centred (app.css .shell), so on a wide viewport there is room either side and none in the middle. Silhouette therefore lives in a FRAME — crown, wings, base — and the middle is left to atmosphere, which cannot compete with text. At narrow widths the wings compress to nothing and the frame degrades to crown plus base, which is the correct graceful failure.",
+    "crown": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 0.16},
+    "wing_left": {"x": 0.0, "y": 0.05, "w": 0.17, "h": 0.9},
+    "wing_right": {"x": 0.83, "y": 0.05, "w": 0.17, "h": 0.9},
+    "base": {"x": 0.0, "y": 0.72, "w": 1.0, "h": 0.28},
+    "deep": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
+    "horizon": {"x": 0.0, "y": 0.34, "w": 1.0, "h": 0.30}
+  },
+
+  "components": {
+    "_comment": "The inventory. `layer` is the only layer an instance may be placed on; tests/test_scenes.py refuses a grammar entry that puts a component on the wrong one. `anchor` says which edge the shape grows from, which is what lets one path builder serve both wings and the crown. `rolls` is the worst case number of floats the builder draws for one instance — the number the slice formula multiplies. Only JavaScript can check it, so tools/scenes.mjs runs every builder at the extremes of every range and fails the build if one outdraws its declaration.",
+    "crag": {"layer": "far", "anchor": "bottom", "about": "A jagged ridge of rock.", "rolls": 14},
+    "tower": {"layer": "far", "anchor": "bottom", "about": "The spire's own body, seen from outside or across.", "rolls": 2},
+    "skyline": {"layer": "far", "anchor": "bottom", "about": "A low broken horizon of distant structure.", "rolls": 9},
+
+    "pillar": {"layer": "mid", "anchor": "bottom", "about": "A standing column. Variants: round, fluted, broken.", "rolls": 4},
+    "arch": {"layer": "mid", "anchor": "top", "about": "A span. Variants: round, pointed, broken.", "rolls": 4},
+    "window": {"layer": "mid", "anchor": "free", "about": "An opening. Variants: slit, barred, rose.", "rolls": 4},
+    "wall": {"layer": "mid", "anchor": "bottom", "about": "Coursed blockwork.", "rolls": 2},
+    "stair": {"layer": "mid", "anchor": "bottom", "about": "Ascending steps, read edge-on.", "rolls": 1},
+    "gate": {"layer": "mid", "anchor": "bottom", "about": "A closed way. The act's threshold.", "rolls": 1},
+    "brazier": {"layer": "mid", "anchor": "bottom", "about": "A standing fire bowl.", "rolls": 0},
+    "stall": {"layer": "mid", "anchor": "top", "about": "An awning over a merchant's nook.", "rolls": 2},
+    "chest": {"layer": "mid", "anchor": "bottom", "about": "A strapped box on a plinth.", "rolls": 0},
+
+    "pillar_edge": {"layer": "near", "anchor": "side", "about": "The near face of a column, cropped by the frame.", "rolls": 1},
+    "chain": {"layer": "near", "anchor": "top", "about": "A hanging line, sometimes with a hook.", "rolls": 2},
+    "banner": {"layer": "near", "anchor": "top", "about": "Cloth hung from above, torn at the hem.", "rolls": 3},
+    "root": {"layer": "near", "anchor": "side", "about": "Organic intrusion through the stone.", "rolls": 3},
+
+    "rubble": {"layer": "floor", "anchor": "bottom", "about": "Fallen stone scattered along the ground line.", "rolls": 19},
+    "step": {"layer": "floor", "anchor": "bottom", "about": "The lip of the floor plane.", "rolls": 1}
+  },
+
+  "biomes": {
+    "_comment": "One per act; acts past the Heart use `void`. A biome never names a colour — it names a tint token and a percentage, and scene.css mixes that into the stone ramp. Because the stone ramp already inverts for the paper theme, every biome works in both themes without a second definition.",
+    "understone": {
+      "act": 1,
+      "name": "The Understone",
+      "tint": "--steel",
+      "tint_pct": 10,
+      "arch": "round",
+      "pillar": ["round", "fluted"],
+      "flora": "moss",
+      "about": "Wet rock and round spans. The part of the spire that was built carefully."
+    },
+    "ironworks": {
+      "act": 2,
+      "name": "The Ironworks",
+      "tint": "--ember",
+      "tint_pct": 12,
+      "arch": "pointed",
+      "pillar": ["fluted", "broken"],
+      "flora": "none",
+      "about": "Girders and rust. Built fast, to be replaced, and never was."
+    },
+    "ember-vault": {
+      "act": 3,
+      "name": "The Ember Vault",
+      "tint": "--blood",
+      "tint_pct": 14,
+      "arch": "broken",
+      "pillar": ["broken", "round"],
+      "flora": "none",
+      "about": "Obsidian and heat cracks. Everything here has already failed once."
+    },
+    "heart": {
+      "act": 4,
+      "name": "The Heart",
+      "tint": "--violet",
+      "tint_pct": 16,
+      "arch": "round",
+      "pillar": ["round"],
+      "flora": "veins",
+      "about": "Organic. The architecture stopped being architecture."
+    },
+    "void": {
+      "act": 5,
+      "name": "The Endless",
+      "tint": "--muted",
+      "tint_pct": 6,
+      "arch": "broken",
+      "pillar": ["broken"],
+      "flora": "none",
+      "about": "Fractured and sparse. A codebase does not finish, so neither does this."
+    }
+  },
+
+  "screens": {
+    "_comment": "Which place each screen is standing in. A background answers `where am I`, which is not the same question as `which panel is showing` — reward happens in the room you just cleared, and intent and combat are one place at two beats.",
+    "title": {"scene": "gate"},
+    "map": {"scene": "shaft"},
+    "room": {"scene": "chamber"},
+    "room.elite": {"scene": "chamber", "modifier": "elite"},
+    "room.boss": {"scene": "sanctum"},
+    "event": {"scene": "crossroads"},
+    "reward": {"scene": "chamber", "modifier": "calm"},
+    "treasure": {"scene": "vault"},
+    "campfire": {"scene": "alcove"},
+    "shop": {"scene": "market"},
+    "deck": {"scene": "study"},
+    "badges": {"scene": "summit"}
+  },
+
+  "modifiers": {
+    "_comment": "A modifier adjusts an existing scene rather than declaring a new one, because an elite room and a monster room are the same place with different pressure.",
+    "elite": {"scale": 1.18, "light": 0.8, "extra": {"near": [{"component": "chain", "zone": "crown", "count": [2, 3]}]}},
+    "calm": {"scale": 1.0, "light": 1.25, "suppress": ["near"]}
+  },
+
+  "scenes": {
+    "gate": {
+      "about": "Outside, looking up. The only scene where you can see the whole spire, which is why the title screen is here.",
+      "layers": ["void", "far", "haze", "mid", "shaft", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.02, "spread": 1.15},
+      "zones": {
+        "ridge": {"x": 0.0, "y": 0.30, "w": 1.0, "h": 0.42},
+        "spire": {"x": 0.34, "y": 0.04, "w": 0.32, "h": 0.72},
+        "approach": {"x": 0.0, "y": 0.74, "w": 1.0, "h": 0.26}
+      },
+      "safe": [{"x": 0.0, "y": 0.0, "w": 1.0, "h": 0.72}],
+      "_safe_note": "Where text lives. Silhouette may cross it; the composer attenuates the layer's delta by contrast.safe_attenuation where it does.",
+      "grammar": {
+        "far": [
+          {"component": "tower", "zone": "spire", "count": [1, 1]},
+          {"component": "crag", "zone": "ridge", "count": [3, 5]}
+        ],
+        "mid": [
+          {"component": "gate", "zone": "approach", "count": [1, 1]}
+        ],
+        "floor": [
+          {"component": "step", "zone": "approach", "count": [1, 1]},
+          {"component": "rubble", "zone": "approach", "count": [2, 4]}
+        ]
+      }
+    },
+
+    "shaft": {
+      "about": "Inside the climb, looking up the well. The map screen is literally the thing this scene depicts, so the art stays at the walls and lets the graph own the middle.",
+      "layers": ["void", "far", "haze", "mid", "shaft", "near", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.0, "spread": 1.3},
+      "zones": {
+        "well": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 0.5},
+        "left_face": {"x": 0.0, "y": 0.08, "w": 0.17, "h": 0.88},
+        "right_face": {"x": 0.83, "y": 0.08, "w": 0.17, "h": 0.88},
+        "landing": {"x": 0.0, "y": 0.78, "w": 1.0, "h": 0.22}
+      },
+      "safe": [{"x": 0.08, "y": 0.0, "w": 0.84, "h": 0.82}],
+      "grammar": {
+        "far": [
+          {"component": "skyline", "zone": "well", "count": [1, 1]}
+        ],
+        "mid": [
+          {"component": "wall", "zone": "left_face", "count": [1, 1]},
+          {"component": "wall", "zone": "right_face", "count": [1, 1]},
+          {"component": "stair", "zone": "landing", "count": [1, 1]},
+          {"component": "window", "zone": "left_face", "count": [1, 3]},
+          {"component": "window", "zone": "right_face", "count": [1, 3]}
+        ],
+        "near": [
+          {"component": "pillar_edge", "zone": "left_face", "count": [1, 1]},
+          {"component": "pillar_edge", "zone": "right_face", "count": [1, 1]}
+        ],
+        "floor": [
+          {"component": "step", "zone": "landing", "count": [1, 1]}
+        ]
+      }
+    },
+
+    "chamber": {
+      "about": "A working room. The most-seen scene in the game, so it is also the most restrained: a colonnade in the wings, a floor line under the hand, nothing across the middle.",
+      "layers": ["void", "far", "haze", "mid", "shaft", "near", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.06, "spread": 1.0},
+      "zones": {
+        "backwall": {"x": 0.0, "y": 0.18, "w": 1.0, "h": 0.5},
+        "colonnade_left": {"x": 0.0, "y": 0.22, "w": 0.17, "h": 0.56},
+        "colonnade_right": {"x": 0.83, "y": 0.22, "w": 0.17, "h": 0.56},
+        "vault": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 0.16},
+        "ground": {"x": 0.0, "y": 0.74, "w": 1.0, "h": 0.26}
+      },
+      "safe": [{"x": 0.08, "y": 0.0, "w": 0.84, "h": 0.78}],
+      "grammar": {
+        "far": [
+          {"component": "crag", "zone": "backwall", "count": [2, 4]}
+        ],
+        "mid": [
+          {"component": "wall", "zone": "backwall", "count": [1, 1]},
+          {"component": "arch", "zone": "vault", "count": [1, 2]},
+          {"component": "pillar", "zone": "colonnade_left", "count": [1, 2]},
+          {"component": "pillar", "zone": "colonnade_right", "count": [1, 2]},
+          {"component": "window", "zone": "backwall", "count": [0, 2]}
+        ],
+        "near": [
+          {"component": "pillar_edge", "zone": "colonnade_left", "count": [0, 1]},
+          {"component": "pillar_edge", "zone": "colonnade_right", "count": [0, 1]}
+        ],
+        "floor": [
+          {"component": "step", "zone": "ground", "count": [1, 1]},
+          {"component": "rubble", "zone": "ground", "count": [1, 3]}
+        ]
+      }
+    },
+
+    "sanctum": {
+      "about": "The act's gate. Taller, symmetrical, and the only scene that puts anything above the content — the boss is the one thing allowed to loom.",
+      "layers": ["void", "far", "haze", "mid", "shaft", "near", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.1, "spread": 0.85},
+      "zones": {
+        "gateway": {"x": 0.3, "y": 0.0, "w": 0.4, "h": 0.34},
+        "flank_left": {"x": 0.0, "y": 0.1, "w": 0.2, "h": 0.72},
+        "flank_right": {"x": 0.8, "y": 0.1, "w": 0.2, "h": 0.72},
+        "dais": {"x": 0.0, "y": 0.76, "w": 1.0, "h": 0.24}
+      },
+      "safe": [{"x": 0.09, "y": 0.06, "w": 0.82, "h": 0.72}],
+      "grammar": {
+        "far": [
+          {"component": "tower", "zone": "gateway", "count": [1, 1]}
+        ],
+        "mid": [
+          {"component": "gate", "zone": "gateway", "count": [1, 1]},
+          {"component": "pillar", "zone": "flank_left", "count": [1, 2]},
+          {"component": "pillar", "zone": "flank_right", "count": [1, 2]}
+        ],
+        "near": [
+          {"component": "banner", "zone": "flank_left", "count": [0, 1]},
+          {"component": "banner", "zone": "flank_right", "count": [0, 1]},
+          {"component": "chain", "zone": "gateway", "count": [1, 2]}
+        ],
+        "floor": [
+          {"component": "step", "zone": "dais", "count": [1, 1]}
+        ]
+      }
+    },
+
+    "crossroads": {
+      "about": "A fork with no checkable way out. Two arches going different directions and no floor line committing to either — the ambiguity is the point, since an event is the one room with no honest intent.",
+      "layers": ["void", "far", "haze", "mid", "shaft", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.05, "spread": 1.05},
+      "zones": {
+        "left_way": {"x": 0.0, "y": 0.2, "w": 0.26, "h": 0.58},
+        "right_way": {"x": 0.74, "y": 0.2, "w": 0.26, "h": 0.58},
+        "far_wall": {"x": 0.2, "y": 0.28, "w": 0.6, "h": 0.36},
+        "ground": {"x": 0.0, "y": 0.76, "w": 1.0, "h": 0.24}
+      },
+      "safe": [{"x": 0.08, "y": 0.0, "w": 0.84, "h": 0.8}],
+      "grammar": {
+        "far": [
+          {"component": "skyline", "zone": "far_wall", "count": [1, 1]}
+        ],
+        "mid": [
+          {"component": "arch", "zone": "left_way", "count": [1, 1]},
+          {"component": "arch", "zone": "right_way", "count": [1, 1]},
+          {"component": "window", "zone": "far_wall", "count": [0, 1]}
+        ],
+        "floor": [
+          {"component": "rubble", "zone": "ground", "count": [1, 2]}
+        ]
+      }
+    },
+
+    "vault": {
+      "about": "A chest alcove. Small, close, and the only scene lit from below.",
+      "layers": ["void", "haze", "mid", "shaft", "near", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.72, "spread": 0.6},
+      "zones": {
+        "niche": {"x": 0.04, "y": 0.46, "w": 0.2, "h": 0.32},
+        "walls": {"x": 0.0, "y": 0.5, "w": 1.0, "h": 0.28},
+        "ground": {"x": 0.0, "y": 0.76, "w": 1.0, "h": 0.24}
+      },
+      "safe": [{"x": 0.08, "y": 0.0, "w": 0.84, "h": 0.74}],
+      "grammar": {
+        "mid": [
+          {"component": "wall", "zone": "walls", "count": [1, 1]},
+          {"component": "chest", "zone": "niche", "count": [1, 1]}
+        ],
+        "near": [
+          {"component": "chain", "zone": "walls", "count": [1, 2]}
+        ],
+        "floor": [
+          {"component": "step", "zone": "ground", "count": [1, 1]}
+        ]
+      }
+    },
+
+    "alcove": {
+      "about": "A rest cut into the wall. The one scene with its own light source in frame — the brazier, not the shaft — so the warm pool sits low and close.",
+      "layers": ["void", "haze", "mid", "shaft", "near", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.78, "spread": 0.7},
+      "zones": {
+        "hearth": {"x": 0.42, "y": 0.62, "w": 0.16, "h": 0.2},
+        "recess": {"x": 0.1, "y": 0.2, "w": 0.8, "h": 0.5},
+        "wing_left": {"x": 0.0, "y": 0.2, "w": 0.16, "h": 0.6},
+        "wing_right": {"x": 0.84, "y": 0.2, "w": 0.16, "h": 0.6},
+        "ground": {"x": 0.0, "y": 0.78, "w": 1.0, "h": 0.22}
+      },
+      "safe": [{"x": 0.08, "y": 0.0, "w": 0.84, "h": 0.76}],
+      "grammar": {
+        "mid": [
+          {"component": "arch", "zone": "recess", "count": [1, 1]},
+          {"component": "brazier", "zone": "hearth", "count": [1, 1]},
+          {"component": "pillar", "zone": "wing_left", "count": [0, 1]},
+          {"component": "pillar", "zone": "wing_right", "count": [0, 1]}
+        ],
+        "near": [
+          {"component": "root", "zone": "wing_left", "count": [0, 1]},
+          {"component": "root", "zone": "wing_right", "count": [0, 1]}
+        ],
+        "floor": [
+          {"component": "rubble", "zone": "ground", "count": [1, 3]}
+        ]
+      }
+    },
+
+    "market": {
+      "about": "A merchant's nook. Cloth and awning rather than stone, because the shop is the one place in the spire somebody chose to be.",
+      "layers": ["void", "haze", "mid", "shaft", "near", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.08, "spread": 0.95},
+      "zones": {
+        "awning": {"x": 0.08, "y": 0.0, "w": 0.84, "h": 0.18},
+        "backing": {"x": 0.1, "y": 0.2, "w": 0.8, "h": 0.5},
+        "wing_left": {"x": 0.0, "y": 0.16, "w": 0.16, "h": 0.64},
+        "wing_right": {"x": 0.84, "y": 0.16, "w": 0.16, "h": 0.64},
+        "ground": {"x": 0.0, "y": 0.78, "w": 1.0, "h": 0.22}
+      },
+      "safe": [{"x": 0.08, "y": 0.02, "w": 0.84, "h": 0.76}],
+      "grammar": {
+        "mid": [
+          {"component": "stall", "zone": "awning", "count": [1, 1]},
+          {"component": "wall", "zone": "backing", "count": [1, 1]},
+          {"component": "pillar", "zone": "wing_left", "count": [1, 1]},
+          {"component": "pillar", "zone": "wing_right", "count": [1, 1]}
+        ],
+        "near": [
+          {"component": "banner", "zone": "wing_left", "count": [1, 2]},
+          {"component": "banner", "zone": "wing_right", "count": [1, 2]}
+        ],
+        "floor": [
+          {"component": "step", "zone": "ground", "count": [1, 1]}
+        ]
+      }
+    },
+
+    "study": {
+      "about": "Not a place. The deck screen is a menu, so it gets the only scene with no architecture at all — atmosphere and a floor line, and nothing that pretends you walked somewhere.",
+      "layers": ["void", "haze", "shaft", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.0, "spread": 1.2},
+      "zones": {
+        "ground": {"x": 0.0, "y": 0.82, "w": 1.0, "h": 0.18}
+      },
+      "safe": [{"x": 0.0, "y": 0.0, "w": 1.0, "h": 0.84}],
+      "grammar": {
+        "floor": [
+          {"component": "step", "zone": "ground", "count": [1, 1]}
+        ]
+      }
+    },
+
+    "summit": {
+      "about": "Above the act you just cleared. The only scene that looks down instead of up, and the only one where the horizon sits low — you can see how far you came, which is what a badge is for.",
+      "layers": ["void", "far", "haze", "mid", "shaft", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.12, "spread": 1.4},
+      "zones": {
+        "horizon": {"x": 0.0, "y": 0.52, "w": 1.0, "h": 0.3},
+        "ledge": {"x": 0.0, "y": 0.8, "w": 1.0, "h": 0.2},
+        "wing_left": {"x": 0.0, "y": 0.3, "w": 0.15, "h": 0.5},
+        "wing_right": {"x": 0.85, "y": 0.3, "w": 0.15, "h": 0.5}
+      },
+      "safe": [{"x": 0.08, "y": 0.0, "w": 0.84, "h": 0.8}],
+      "grammar": {
+        "far": [
+          {"component": "crag", "zone": "horizon", "count": [3, 6]},
+          {"component": "skyline", "zone": "horizon", "count": [1, 1]}
+        ],
+        "mid": [
+          {"component": "pillar", "zone": "wing_left", "count": [0, 1]},
+          {"component": "pillar", "zone": "wing_right", "count": [0, 1]}
+        ],
+        "floor": [
+          {"component": "step", "zone": "ledge", "count": [1, 1]},
+          {"component": "rubble", "zone": "ledge", "count": [1, 4]}
+        ]
+      }
+    }
+  }
+};
+
+/* ---- bridge.js ---- */
 /* The MCP Apps bridge.
  *
  * Hand-written against the postMessage protocol in the MCP Apps specification
@@ -1160,6 +1766,629 @@ function unwrap(result) {
 }
 
 
+/* ---- scene.js ---- */
+/* The scene composer.
+ *
+ * Reads `content/scenes.json` — inlined at build time by tools/build-app.mjs —
+ * and builds a background out of modular silhouette parts. The JSON is not a
+ * description of the backgrounds; it is their source, and tools/scenes.mjs draws
+ * its labelled wireframe from the same object, so the spec cannot drift.
+ *
+ * Two things are worth understanding before changing anything here.
+ *
+ * **There is no RNG.** `scripts/mapgen.py` established the pattern with
+ * `unknown_rolls`: the engine pre-rolls a fixed float vector, ships it in the
+ * payload, and the client applies shared thresholds. So this file is a pure
+ * function from (scene, biome, rolls) to SVG — same inputs, same picture, every
+ * time, on any machine. Re-entering a floor looks identical because it *is*
+ * identical, not because something was cached.
+ *
+ * **Legibility is bought with contrast, not geometry.** The content column
+ * covers most of the frame, so there is nowhere to draw "around" the text. Each
+ * layer instead declares how far it may step from the void, and any shape whose
+ * box crosses a safe rectangle has that step attenuated. The result is bold
+ * framing at the edges and a whisper behind the paragraphs — which is what a
+ * background is supposed to do anyway.
+ */
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/* The frame every scene is composed in. Normalised coordinates from the JSON are
+   multiplied up into this box; the SVG then scales to whatever the viewport is,
+   so a scene is resolution-independent and never needs a resize handler. */
+const W = 1000;
+const H = 700;
+
+/* ------------------------------------------------------------------ rolls -- */
+
+/* A cursor over the engine's float vector.
+ *
+ * Each grammar entry consumes a FIXED slice — `2 + component.rolls * count_max`
+ * — whether or not it uses all of it. That is deliberate: if entries consumed
+ * only what they needed, adding one pillar to a scene would shift the dice of
+ * every entry after it and silently redraw the whole background.
+ *
+ * The slice is a fence, not a suggestion. `open()` clamps reads to it, so a
+ * builder that asks for more than its component declared wraps inside its own
+ * slice rather than reaching into the next entry's. An earlier version only
+ * moved the cursor back to the mark afterwards, which let `crag` (14 draws
+ * against a slice of 5) hand its tail to whatever came next — the picture was
+ * still deterministic, so nothing looked broken; it just quietly correlated
+ * every entry in the scene with the one before it. Now the fence holds, and
+ * tools/scenes.mjs fails the build if a builder ever needs to lean on it. */
+class Rolls {
+  constructor(values) {
+    this.values = (values && values.length) ? values : [0.5];
+    this.i = 0;
+    this.start = 0;
+    this.limit = this.values.length;
+  }
+
+  take() {
+    const span = Math.max(1, this.limit - this.start);
+    const value = this.values[(this.start + ((this.i - this.start) % span)) % this.values.length];
+    this.i += 1;
+    return value;
+  }
+
+  /* Fence this entry's slice off before drawing into it. */
+  open(start, slice) {
+    this.i = start;
+    this.start = start;
+    this.limit = start + slice;
+  }
+
+  /* Skip to the end of this entry's slice, so the next entry starts where the
+     contract says it does regardless of what this one used. */
+  advanceTo(mark) {
+    this.i = mark;
+    this.start = mark;
+    this.limit = this.values.length;
+  }
+
+  between(low, high) {
+    return low + this.take() * (high - low);
+  }
+
+  intBetween(low, high) {
+    if (high <= low) return low;
+    return Math.min(high, low + Math.floor(this.take() * (high - low + 1)));
+  }
+
+  pick(list) {
+    if (!list || !list.length) return null;
+    return list[Math.min(list.length - 1, Math.floor(this.take() * list.length))];
+  }
+}
+
+/* ------------------------------------------------------------------ paint -- */
+
+/* How far a shape may step away from the void, given its layer and where it sits.
+ *
+ * `--sc-void` and `--sc-form` are defined per theme in scene.css, so the step is
+ * always *toward* legibility: lighter than near-black on stone, darker than
+ * paper on the light theme. The composer never names a colour. */
+function fillFor(layerDelta, behindText) {
+  // Continuous, not binary. A shape half behind the content column should be
+  // half-quieted; an earlier binary version muted anything that touched a safe
+  // area, which flattened every wing pillar in the game and made the interiors
+  // read as flat washes.
+  const quiet = 1 - behindText * (1 - SCENES.contrast.safe_attenuation);
+  const pct = Math.round(layerDelta * quiet * 100);
+  return `color-mix(in srgb, var(--sc-form) ${pct}%, var(--sc-void))`;
+}
+
+/** How much of this shape sits behind text, 0..1. */
+function behindTextFraction(box, safeRects) {
+  let covered = 0;
+  safeRects.forEach((safe) => {
+    const x = Math.max(0, Math.min(box.x + box.w, safe.x + safe.w) - Math.max(box.x, safe.x));
+    const y = Math.max(0, Math.min(box.y + box.h, safe.y + safe.h) - Math.max(box.y, safe.y));
+    covered = Math.max(covered, (x * y) / (box.w * box.h));
+  });
+  return Math.min(1, covered);
+}
+
+/* ------------------------------------------------------- component library -- */
+
+/* Every builder is a pure function of (box, rolls, biome) returning SVG path
+   data in frame coordinates. `box` is the zone, already scaled up from the
+   normalised rectangle. Shapes are drawn deliberately coarse — a silhouette that
+   survives `filter: grayscale(1)` is one made of large, distinguishable masses,
+   not of detail. */
+
+const rect = (x, y, w, h) => `M${x} ${y}h${w}v${h}h${-w}Z`;
+
+function crag(box, rolls) {
+  const peaks = rolls.intBetween(3, 6);
+  const base = box.y + box.h;
+  let d = `M${box.x} ${base}`;
+  for (let i = 0; i <= peaks; i += 1) {
+    const x = box.x + (box.w * i) / peaks;
+    const dip = rolls.between(0.25, 1);
+    d += `L${x.toFixed(1)} ${(base - box.h * dip).toFixed(1)}`;
+    if (i < peaks) {
+      const mid = box.x + (box.w * (i + 0.5)) / peaks;
+      d += `L${mid.toFixed(1)} ${(base - box.h * rolls.between(0.05, 0.5)).toFixed(1)}`;
+    }
+  }
+  return `${d}L${box.x + box.w} ${base}Z`;
+}
+
+function tower(box, rolls) {
+  const base = box.y + box.h;
+  const taper = rolls.between(0.28, 0.46);
+  const left = box.x + box.w * taper * 0.5;
+  const right = box.x + box.w - box.w * taper * 0.5;
+  const tiers = rolls.intBetween(2, 4);
+  let d = `M${box.x} ${base}L${box.x} ${(box.y + box.h * 0.55).toFixed(1)}`;
+  for (let i = 0; i < tiers; i += 1) {
+    const t = (i + 1) / tiers;
+    const y = box.y + box.h * 0.55 * (1 - t);
+    const inset = box.w * 0.06 * t;
+    d += `L${(box.x + inset).toFixed(1)} ${y.toFixed(1)}`;
+  }
+  d += `L${left.toFixed(1)} ${box.y.toFixed(1)}L${right.toFixed(1)} ${box.y.toFixed(1)}`;
+  for (let i = tiers - 1; i >= 0; i -= 1) {
+    const t = (i + 1) / tiers;
+    const y = box.y + box.h * 0.55 * (1 - t);
+    const inset = box.w * 0.06 * t;
+    d += `L${(box.x + box.w - inset).toFixed(1)} ${y.toFixed(1)}`;
+  }
+  return `${d}L${box.x + box.w} ${(box.y + box.h * 0.55).toFixed(1)}L${box.x + box.w} ${base}Z`;
+}
+
+function skyline(box, rolls) {
+  const steps = rolls.intBetween(5, 8);
+  const base = box.y + box.h;
+  let d = `M${box.x} ${base}`;
+  let x = box.x;
+  for (let i = 0; i < steps; i += 1) {
+    const w = box.w / steps;
+    const h = box.h * rolls.between(0.15, 0.72);
+    d += `L${x.toFixed(1)} ${(base - h).toFixed(1)}L${(x + w).toFixed(1)} ${(base - h).toFixed(1)}`;
+    x += w;
+  }
+  return `${d}L${box.x + box.w} ${base}Z`;
+}
+
+function pillar(box, rolls, biome) {
+  const variant = rolls.pick(biome.pillar) || 'round';
+  const w = box.w * rolls.between(0.34, 0.62);
+  const x = box.x + (box.w - w) * rolls.between(0.1, 0.9);
+  const base = box.y + box.h;
+  const capH = box.h * 0.06;
+
+  if (variant === 'broken') {
+    const stop = box.y + box.h * rolls.between(0.3, 0.62);
+    return `M${x.toFixed(1)} ${base}L${x.toFixed(1)} ${stop.toFixed(1)}`
+      + `L${(x + w * 0.55).toFixed(1)} ${(stop + capH * 1.4).toFixed(1)}`
+      + `L${(x + w).toFixed(1)} ${(stop - capH * 0.6).toFixed(1)}`
+      + `L${(x + w).toFixed(1)} ${base}Z`;
+  }
+
+  const shaftInset = variant === 'fluted' ? w * 0.12 : w * 0.06;
+  return `M${(x - w * 0.1).toFixed(1)} ${base}`
+    + `L${(x - w * 0.1).toFixed(1)} ${(base - capH).toFixed(1)}`
+    + `L${(x + shaftInset).toFixed(1)} ${(base - capH * 2).toFixed(1)}`
+    + `L${(x + shaftInset).toFixed(1)} ${(box.y + capH * 2).toFixed(1)}`
+    + `L${(x - w * 0.1).toFixed(1)} ${(box.y + capH).toFixed(1)}`
+    + `L${(x - w * 0.1).toFixed(1)} ${box.y.toFixed(1)}`
+    + `L${(x + w * 1.1).toFixed(1)} ${box.y.toFixed(1)}`
+    + `L${(x + w * 1.1).toFixed(1)} ${(box.y + capH).toFixed(1)}`
+    + `L${(x + w - shaftInset).toFixed(1)} ${(box.y + capH * 2).toFixed(1)}`
+    + `L${(x + w - shaftInset).toFixed(1)} ${(base - capH * 2).toFixed(1)}`
+    + `L${(x + w * 1.1).toFixed(1)} ${(base - capH).toFixed(1)}`
+    + `L${(x + w * 1.1).toFixed(1)} ${base}Z`;
+}
+
+/* An arch is drawn as the WALL around the opening, not the opening itself —
+   that is what makes it read as something you are standing inside rather than a
+   croquet hoop floating in the dark. */
+function arch(box, rolls, biome) {
+  const style = biome.arch;
+  const span = box.w * rolls.between(0.44, 0.72);
+  const cx = box.x + box.w / 2 + (box.w - span) * (rolls.take() - 0.5) * 0.4;
+  const left = cx - span / 2;
+  const right = cx + span / 2;
+  const base = box.y + box.h;
+  const spring = box.y + box.h * rolls.between(0.42, 0.62);
+
+  let opening;
+  if (style === 'pointed') {
+    const apex = box.y + box.h * 0.06;
+    opening = `M${left.toFixed(1)} ${base}L${left.toFixed(1)} ${spring.toFixed(1)}`
+      + `Q${left.toFixed(1)} ${apex.toFixed(1)} ${cx.toFixed(1)} ${apex.toFixed(1)}`
+      + `Q${right.toFixed(1)} ${apex.toFixed(1)} ${right.toFixed(1)} ${spring.toFixed(1)}`
+      + `L${right.toFixed(1)} ${base}Z`;
+  } else if (style === 'broken') {
+    const apex = box.y + box.h * rolls.between(0.1, 0.24);
+    opening = `M${left.toFixed(1)} ${base}L${left.toFixed(1)} ${spring.toFixed(1)}`
+      + `L${(cx - span * 0.18).toFixed(1)} ${apex.toFixed(1)}`
+      + `L${(cx + span * 0.1).toFixed(1)} ${(apex + box.h * 0.08).toFixed(1)}`
+      + `L${right.toFixed(1)} ${spring.toFixed(1)}L${right.toFixed(1)} ${base}Z`;
+  } else {
+    opening = `M${left.toFixed(1)} ${base}L${left.toFixed(1)} ${spring.toFixed(1)}`
+      + `A${(span / 2).toFixed(1)} ${(span / 2).toFixed(1)} 0 0 1 ${right.toFixed(1)} ${spring.toFixed(1)}`
+      + `L${right.toFixed(1)} ${base}Z`;
+  }
+  // Outer wall first, opening second: with fill-rule evenodd the second subpath
+  // punches a hole, which is the whole trick.
+  return `${rect(box.x, box.y, box.w, box.h)}${opening}`;
+}
+
+function windowShape(box, rolls, biome) {
+  const w = box.w * rolls.between(0.1, 0.2);
+  const h = box.h * rolls.between(0.16, 0.34);
+  const x = box.x + (box.w - w) * rolls.take();
+  const y = box.y + (box.h - h) * rolls.between(0.1, 0.7);
+  if (biome.arch === 'round') {
+    return `M${x.toFixed(1)} ${(y + h).toFixed(1)}L${x.toFixed(1)} ${(y + w / 2).toFixed(1)}`
+      + `A${(w / 2).toFixed(1)} ${(w / 2).toFixed(1)} 0 0 1 ${(x + w).toFixed(1)} ${(y + w / 2).toFixed(1)}`
+      + `L${(x + w).toFixed(1)} ${(y + h).toFixed(1)}Z`;
+  }
+  return rect(x, y, w, h);
+}
+
+function wall(box, rolls) {
+  const courses = rolls.intBetween(4, 7);
+  const top = box.y + box.h * rolls.between(0.0, 0.14);
+  let d = rect(box.x, top, box.w, box.y + box.h - top);
+  // Mortar lines read as thin gaps punched out of the mass.
+  const step = (box.y + box.h - top) / courses;
+  for (let i = 1; i < courses; i += 1) {
+    const y = top + step * i;
+    d += rect(box.x, y, box.w, Math.max(1.5, step * 0.06));
+  }
+  return d;
+}
+
+function stair(box, rolls) {
+  const steps = rolls.intBetween(4, 7);
+  const base = box.y + box.h;
+  let d = `M${box.x} ${base}`;
+  for (let i = 0; i < steps; i += 1) {
+    const x = box.x + (box.w * i) / steps;
+    const y = base - (box.h * (i + 1)) / steps;
+    d += `L${x.toFixed(1)} ${y.toFixed(1)}L${(box.x + (box.w * (i + 1)) / steps).toFixed(1)} ${y.toFixed(1)}`;
+  }
+  return `${d}L${box.x + box.w} ${base}Z`;
+}
+
+function gate(box, rolls, biome) {
+  const w = box.w * rolls.between(0.3, 0.44);
+  const x = box.x + (box.w - w) / 2;
+  const base = box.y + box.h;
+  const lintel = box.y + box.h * 0.18;
+  let d = rect(x - w * 0.14, lintel - box.h * 0.1, w * 1.28, box.h * 0.1);
+  d += rect(x, lintel, w, base - lintel);
+  if (biome.arch !== 'broken') {
+    // A seam down the middle, so it reads as two leaves rather than a slab.
+    d += rect(x + w / 2 - 1.5, lintel, 3, base - lintel);
+  }
+  return d;
+}
+
+function brazier(box, rolls) {
+  const base = box.y + box.h;
+  const w = box.w * 0.6;
+  const x = box.x + (box.w - w) / 2;
+  const bowlY = box.y + box.h * 0.42;
+  return `M${(x + w * 0.32).toFixed(1)} ${base}L${(x + w * 0.42).toFixed(1)} ${(bowlY + box.h * 0.18).toFixed(1)}`
+    + `L${(x + w * 0.58).toFixed(1)} ${(bowlY + box.h * 0.18).toFixed(1)}L${(x + w * 0.68).toFixed(1)} ${base}Z`
+    + `M${x.toFixed(1)} ${bowlY.toFixed(1)}L${(x + w).toFixed(1)} ${bowlY.toFixed(1)}`
+    + `L${(x + w * 0.78).toFixed(1)} ${(bowlY + box.h * 0.2).toFixed(1)}`
+    + `L${(x + w * 0.22).toFixed(1)} ${(bowlY + box.h * 0.2).toFixed(1)}Z`
+    + rect(x - w * 0.2, base - 4, w * 1.4, 4);
+}
+
+function stall(box, rolls) {
+  const scallops = rolls.intBetween(4, 7);
+  const hem = box.y + box.h * rolls.between(0.5, 0.8);
+  let d = `M${box.x} ${box.y}L${box.x + box.w} ${box.y}L${box.x + box.w} ${hem.toFixed(1)}`;
+  for (let i = scallops; i > 0; i -= 1) {
+    const x0 = box.x + (box.w * i) / scallops;
+    const x1 = box.x + (box.w * (i - 1)) / scallops;
+    const mid = (x0 + x1) / 2;
+    d += `Q${mid.toFixed(1)} ${(hem + box.h * 0.22).toFixed(1)} ${x1.toFixed(1)} ${hem.toFixed(1)}`;
+  }
+  return `${d}Z`;
+}
+
+function chest(box, rolls) {
+  const base = box.y + box.h;
+  const w = box.w * 0.66;
+  const x = box.x + (box.w - w) / 2;
+  const lid = box.y + box.h * 0.44;
+  return rect(x - w * 0.2, base - box.h * 0.12, w * 1.4, box.h * 0.12)
+    + rect(x, lid, w, base - lid - box.h * 0.12)
+    + `M${x.toFixed(1)} ${lid.toFixed(1)}A${(w / 2).toFixed(1)} ${(box.h * 0.22).toFixed(1)} 0 0 1 ${(x + w).toFixed(1)} ${lid.toFixed(1)}Z`;
+}
+
+function pillarEdge(box, rolls) {
+  const fromLeft = box.x < 0.5 * W;
+  const w = box.w * rolls.between(0.5, 0.85);
+  const x = fromLeft ? box.x : box.x + box.w - w;
+  return rect(x, box.y, w, box.h);
+}
+
+function chain(box, rolls) {
+  const x = box.x + box.w * rolls.take();
+  const len = box.h * rolls.between(0.3, 0.8);
+  const links = Math.max(3, Math.round(len / 26));
+  let d = rect(x - 1.5, box.y, 3, len);
+  for (let i = 0; i < links; i += 1) {
+    const y = box.y + (len * i) / links;
+    d += rect(x - 5, y, 10, 5);
+  }
+  return d;
+}
+
+function banner(box, rolls) {
+  const w = box.w * rolls.between(0.3, 0.55);
+  const x = box.x + (box.w - w) * rolls.take();
+  const len = box.h * rolls.between(0.35, 0.7);
+  const notch = len * 0.12;
+  return `M${x.toFixed(1)} ${box.y}L${(x + w).toFixed(1)} ${box.y}`
+    + `L${(x + w).toFixed(1)} ${(box.y + len).toFixed(1)}`
+    + `L${(x + w / 2).toFixed(1)} ${(box.y + len - notch).toFixed(1)}`
+    + `L${x.toFixed(1)} ${(box.y + len).toFixed(1)}Z`;
+}
+
+function root(box, rolls) {
+  const fromLeft = box.x < 0.5 * W;
+  const y0 = box.y + box.h * rolls.between(0.1, 0.6);
+  const reach = box.w * rolls.between(0.6, 1.1);
+  const x0 = fromLeft ? box.x : box.x + box.w;
+  const dir = fromLeft ? 1 : -1;
+  const sag = box.h * rolls.between(0.1, 0.3);
+  const thick = Math.max(3, box.w * 0.06);
+  return `M${x0.toFixed(1)} ${y0.toFixed(1)}`
+    + `Q${(x0 + dir * reach * 0.5).toFixed(1)} ${(y0 + sag).toFixed(1)} `
+    + `${(x0 + dir * reach).toFixed(1)} ${(y0 + sag * 1.6).toFixed(1)}`
+    + `L${(x0 + dir * reach).toFixed(1)} ${(y0 + sag * 1.6 + thick).toFixed(1)}`
+    + `Q${(x0 + dir * reach * 0.5).toFixed(1)} ${(y0 + sag + thick).toFixed(1)} `
+    + `${x0.toFixed(1)} ${(y0 + thick).toFixed(1)}Z`;
+}
+
+function rubble(box, rolls) {
+  const chunks = rolls.intBetween(3, 6);
+  const base = box.y + box.h;
+  let d = '';
+  for (let i = 0; i < chunks; i += 1) {
+    const w = box.w * rolls.between(0.02, 0.06);
+    const h = w * rolls.between(0.4, 1.1);
+    const x = box.x + box.w * rolls.take();
+    d += `M${x.toFixed(1)} ${base}L${(x + w * 0.3).toFixed(1)} ${(base - h).toFixed(1)}`
+      + `L${(x + w).toFixed(1)} ${(base - h * 0.6).toFixed(1)}L${(x + w * 1.2).toFixed(1)} ${base}Z`;
+  }
+  return d;
+}
+
+function step(box, rolls) {
+  const lip = box.y + box.h * rolls.between(0.0, 0.25);
+  return rect(box.x, lip, box.w, box.y + box.h - lip);
+}
+
+const COMPONENTS = {
+  crag, tower, skyline,
+  pillar, arch, window: windowShape, wall, stair, gate, brazier, stall, chest,
+  pillar_edge: pillarEdge, chain, banner, root,
+  rubble, step,
+};
+
+/* ---------------------------------------------------------------- compose -- */
+
+let SCENES = null;
+
+function loadScenes(data) {
+  SCENES = data;
+}
+
+function scaleRect(r) {
+  return { x: r.x * W, y: r.y * H, w: r.w * W, h: r.h * H };
+}
+
+function svgEl(name, attrs) {
+  const node = document.createElementNS(SVG_NS, name);
+  Object.entries(attrs || {}).forEach(([k, v]) => node.setAttribute(k, String(v)));
+  return node;
+}
+
+/** Build the silhouette layers for one scene. Pure: same inputs, same DOM. */
+function composeScene({ scene, biome, modifier, rolls }) {
+  const spec = SCENES.scenes[scene];
+  if (!spec) return null;
+  const biomeSpec = SCENES.biomes[biome] || SCENES.biomes.understone;
+  const mod = modifier ? SCENES.modifiers[modifier] : null;
+  const cursor = new Rolls(rolls);
+  const safe = (spec.safe || []).map(scaleRect);
+  const deltas = Object.fromEntries(SCENES.layers.map((l) => [l.id, l.max_delta]));
+
+  const suppressed = new Set((mod && mod.suppress) || []);
+  const built = [];
+
+  const silhouettes = SCENES.layers.filter(
+    (layer) => layer.kind === 'silhouette' && spec.layers.includes(layer.id),
+  );
+
+  /* Walk order: the whole base grammar first, layer by layer, then the
+   * modifier's extras.
+   *
+   * This has to match `mapgen.scene_budget`, which sums the base grammar and
+   * *appends* the worst modifier's extras. Splicing extras into their layer
+   * instead pushed every later layer's slices along, so the same node drawn as
+   * an elite read a different floor from the same node drawn plain — the two
+   * disagreed about which float meant what. Extras belong at the tail, which is
+   * exactly where the engine reserves room for them.
+   *
+   * Drawing order is unaffected: each path is appended to its own layer group,
+   * and `mountScene` does the stacking. Only the dice are ordered here. */
+  const walk = [];
+  silhouettes.forEach((layer) => {
+    (spec.grammar[layer.id] || []).forEach((entry) => walk.push({ layer, entry }));
+  });
+  const baseEntries = walk.length;
+  silhouettes.forEach((layer) => {
+    (((mod && mod.extra) || {})[layer.id] || []).forEach((entry) => walk.push({ layer, entry }));
+  });
+
+  const groups = new Map();
+  // One SVG per layer, not one per scene. The stack interleaves — haze sits
+  // between far and mid, the light shaft between mid and near — and CSS
+  // gradients cannot be siblings of SVG groups. mountScene() does the weaving;
+  // this only has to keep the layers separable.
+  const groupFor = (layer) => {
+    if (!groups.has(layer.id)) {
+      groups.set(layer.id, svgEl('svg', {
+        viewBox: `0 0 ${W} ${H}`,
+        preserveAspectRatio: 'xMidYMid slice',
+        'aria-hidden': 'true',
+        focusable: 'false',
+        class: `scene-svg scene-layer-${layer.id}`,
+      }));
+    }
+    return groups.get(layer.id);
+  };
+
+  let consumedBase = 0;
+  walk.forEach(({ layer, entry }, index) => {
+    if (index === baseEntries) consumedBase = cursor.i;
+    /* A suppressed layer still costs its dice.
+     *
+     * The engine sizes the vector from the full grammar, because the budget is
+     * a property of the scene and not of whichever modifier is applied. Skipping
+     * a suppressed layer's slices left the cursor short and every layer after it
+     * reading floats meant for something else — the reward scene uses `calm`,
+     * which suppresses `near`, so it drew misaligned on every seed. A layer that
+     * draws nothing is just an entry that draws nothing: it reserves its budget
+     * and moves on. */
+    const drawing = !suppressed.has(layer.id);
+
+    // Fixed slice: reserve this entry's budget before drawing anything, so one
+    // entry can never shift the dice of the next. The cost comes from the
+    // component's own declaration, because only the builder knows how many
+    // floats it draws.
+    const cost = (SCENES.components[entry.component] || {}).rolls || 0;
+    const slice = 2 + cost * entry.count[1];
+    const mark = cursor.i + slice;
+    cursor.open(cursor.i, slice);
+
+    const appears = cursor.take();
+    const [low, high] = entry.count;
+    const count = cursor.intBetween(low, high);
+    if (drawing && count > 0 && (entry.weight === undefined || appears <= entry.weight)) {
+      const zone = spec.zones[entry.zone] || SCENES.bands[entry.zone];
+      const box = scaleRect(zone);
+      const builder = COMPONENTS[entry.component];
+      const group = groupFor(layer);
+      for (let i = 0; i < count; i += 1) {
+        // Each instance gets its own slot across the zone, so repeats read as a
+        // colonnade rather than a pile.
+        const slot = count === 1 ? box : {
+          x: box.x + (box.w * i) / count,
+          y: box.y,
+          w: box.w / count,
+          h: box.h,
+        };
+        const scaled = mod && mod.scale
+          ? { ...slot, y: slot.y - slot.h * (mod.scale - 1) * 0.5, h: slot.h * mod.scale }
+          : slot;
+        const d = builder(scaled, cursor, biomeSpec);
+        if (!d) continue;
+        group.appendChild(svgEl('path', {
+          d,
+          'fill-rule': 'evenodd',
+          fill: fillFor(deltas[layer.id], behindTextFraction(scaled, safe)),
+        }));
+      }
+    }
+    cursor.advanceTo(mark);
+  });
+
+  silhouettes.forEach((layer) => {
+    const group = groups.get(layer.id);
+    if (group && group.childNodes.length) built.push({ id: layer.id, node: group });
+  });
+
+  if (baseEntries === walk.length) consumedBase = cursor.i;
+  // `consumed` is the whole walk; `consumedBase` is where the modifier's extras
+  // begin. Both are exported so tools/scene-consumption.mjs can check that the
+  // extras sit at the tail, exactly where `mapgen.scene_budget` reserves them —
+  // a length-only check passed while `elite` still spliced them mid-stream.
+  return {
+    layers: built, spec, biome: biomeSpec, modifier: mod,
+    consumed: cursor.i, consumedBase,
+  };
+}
+
+/* Weave the composed silhouette into a host that already holds the atmosphere
+ * elements, in the order content/scenes.json declares.
+ *
+ * The rule is one line: a silhouette layer goes immediately before the first
+ * atmosphere element declared after it. That is what makes the stack real rather
+ * than decorative — fog genuinely sits between the distance and the architecture,
+ * and the light shaft genuinely falls behind the foreground. It lives here, and
+ * not at each call site, so the gallery and the client cannot stack the same
+ * scene two different ways. */
+function mountScene(host, composed) {
+  host.querySelectorAll('.scene-svg').forEach((node) => node.remove());
+  if (!composed) return;
+  const order = SCENES.layers.map((l) => l.id);
+  composed.layers.forEach(({ id, node }) => {
+    const after = order.slice(order.indexOf(id) + 1)
+      .map((next) => host.querySelector(`.sc-${next}`))
+      .find(Boolean);
+    host.insertBefore(node, after || null);
+  });
+}
+
+/* Atmosphere is CSS, not SVG: gradients belong in the stylesheet where the theme
+   tokens live, and a gradient does not need geometry. The composer only tells the
+   stylesheet where the light is and how far it reaches. */
+function applyAtmosphere(host, { scene, biome, modifier }) {
+  const spec = SCENES.scenes[scene];
+  if (!spec) return;
+  const biomeSpec = SCENES.biomes[biome] || SCENES.biomes.understone;
+  const mod = modifier ? SCENES.modifiers[modifier] : null;
+  const light = spec.light;
+
+  host.style.setProperty('--sc-light-x', `${(light.x * 100).toFixed(1)}%`);
+  host.style.setProperty('--sc-light-y', `${(light.y * 100).toFixed(1)}%`);
+  host.style.setProperty('--sc-light-spread', String(light.spread * (mod ? mod.light || 1 : 1)));
+  host.style.setProperty('--sc-tint', `var(${biomeSpec.tint})`);
+  host.style.setProperty('--sc-tint-pct', `${biomeSpec.tint_pct}%`);
+  host.dataset.scene = scene;
+  host.dataset.biome = biome;
+  const layers = new Set(spec.layers);
+  ['void', 'haze', 'shaft', 'glow', 'vignette'].forEach((layer) => {
+    host.classList.toggle(`has-${layer}`, layers.has(layer));
+  });
+}
+
+/** Which scene a screen is standing in. */
+function sceneFor(screen, room) {
+  // The room's kind refines the room screen and only the room screen. The deck
+  // and badges views are not places you are standing in, so an open room must
+  // not leak its scene into them.
+  if (screen === 'room' && room) {
+    const byKind = SCENES.screens[`room.${room.kind}`] || SCENES.screens[room.kind];
+    if (byKind) return byKind;
+  }
+  return SCENES.screens[screen] || SCENES.screens.map;
+}
+
+function biomeForAct(act) {
+  const entries = Object.entries(SCENES.biomes).filter(([k]) => k !== '_comment');
+  const exact = entries.find(([, b]) => b.act === act);
+  if (exact) return exact[0];
+  // The climb is unbounded; everything past the last named act is the endless one.
+  return entries[entries.length - 1][0];
+}
+
+const SCENE_FRAME = { W, H };
+
+
 /* ---- app.js ---- */
 /* Spire — the client.
  *
@@ -1174,6 +2403,7 @@ function unwrap(result) {
  *   - the intent is shown before the hand is usable
  *   - Skip owns the reward hero region and takes focus on entry
  */
+
 
 
 const SOFT_CAP_WARN = 'Deck is at the soft cap — taking a card means trading one away.';
@@ -1218,6 +2448,13 @@ const FACETS = {
    routing is the decision the map exists to support; community sticker mods
    converged on roughly this set. */
 const MARKERS = ['★', '✕', '☠', '❓', '👁'];
+
+/* content/scenes.json, inlined by tools/build-app.mjs. Reading it through a
+   guard rather than importing it means loading app/ unbundled — which nothing
+   ships, but which is how you would poke at one file — leaves the background
+   empty instead of throwing. */
+const SCENE_DATA = typeof SPIRE_SCENES === 'undefined' ? null : SPIRE_SCENES;
+if (SCENE_DATA) loadScenes(SCENE_DATA);
 
 const bridge = new Bridge({ name: 'Spire', version: '0.3.0' });
 
@@ -1271,8 +2508,41 @@ function fanfare(text) {
   setTimeout(() => overlay.remove(), 660);
 }
 
-function setFacet(name) {
+/* Facet tint and background are one gesture, because they answer one question:
+   where am I. Splitting them let the tint change while the room stayed the same
+   picture, which read as a filter rather than a move. */
+function setScene(name) {
   document.documentElement.style.setProperty('--facet', `var(--facet-${FACETS[name] || 'map'})`);
+  paintScene(name);
+}
+
+/* Compose the background for a screen.
+ *
+ * The dice come from the engine — `map.scene_rolls`, one vector per scene, fixed
+ * for a seed and an act — so re-entering a floor is not merely similar to last
+ * time, it is the same picture. Before a run exists there are no dice at all and
+ * the composer falls back to its midpoints, which is the right answer for the
+ * title screen: a symmetric gate, drawn the same for everyone. */
+function paintScene(screen) {
+  const host = $('#scene');
+  if (!host || !SCENE_DATA) return;
+
+  const { scene, modifier } = sceneFor(screen, ui.state && ui.state.room);
+  const act = (ui.state && ui.state.act) || (ui.map && ui.map.act) || 1;
+  const biome = biomeForAct(act);
+  const rolls = (ui.map && ui.map.scene_rolls && ui.map.scene_rolls[scene]) || null;
+
+  // Recomposing costs a few hundred path builds, and render() fires on every
+  // card played. Redraw only when the place actually changed — which means the
+  // seed belongs in the key: starting a new run lands you on the same screen in
+  // the same act with a vector of the same length and entirely different dice.
+  const seed = ui.map ? ui.map.seed : null;
+  const key = `${scene}|${biome}|${modifier || ''}|${act}|${seed}`;
+  if (host.dataset.key === key) return;
+  host.dataset.key = key;
+
+  applyAtmosphere(host, { scene, biome, modifier });
+  mountScene(host, composeScene({ scene, biome, modifier, rolls }));
 }
 
 /* ---------------------------------------------------------------- engine -- */
@@ -2116,7 +3386,7 @@ const SCREENS = {
 };
 
 function render() {
-  setFacet(ui.screen);
+  setScene(ui.screen);
   renderChrome();
   const stage = $('#stage');
   stage.innerHTML = '';

@@ -31,9 +31,14 @@ type hierarchy, motion budget, and do/don't list — then a wireframe that encod
 ## How to use while building
 
 1. Implementing a screen → open its **format** first; treat layout regions as API.  
-2. Changing layout → update format + wireframe in the same PR.  
+2. Changing layout → update format + wireframe in the same PR — including the
+   format's `## Background` section, since a layout region moving is exactly what
+   invalidates a safe rectangle in `content/scenes.json`.  
 3. New facet → copy `templates/facet-format.md`, add wireframe, link here.  
-4. Open `wireframes/demo.html` for the playable loop, or `wireframes/index.html` for the gallery (no build step).
+4. Open `wireframes/demo.html` for the playable loop, or `wireframes/index.html` for the gallery (no build step).  
+5. Scene backgrounds → `node tools/scenes.mjs` renders every wireframe and what
+   it composes into, per act. The JSON it draws from is the same one the client
+   composes from, so the two cannot disagree.
 
 ## Principle
 

@@ -18,8 +18,43 @@ Deckbuilder clarity in a torchlit room. Not dashboard chrome, not generic AI pur
 - Stone and ember by default; ink on paper as the light theme
 - Parchment is for anything you hold — cards, and only cards
 - One accent at a time (facet accent or class accent — not both competing)
-- Geometry over gradients; one warm light source, no continuous glow
+- **Structure is geometry; gradients carry only depth and light** (amended — see below)
+- One warm light source, no continuous glow
 - Motion: 2–3 intentional beats per facet max
+
+> **Amendment (scene backgrounds).** v1 said "geometry over gradients", which
+> read as a ban and was enforced as one: for a while the entire atmosphere of the
+> client was a single radial behind everything. Backgrounds made that untenable —
+> a room you are standing in needs air between you and the far wall, and air is
+> not a shape. The rule is sharpened rather than dropped: **anything that has a
+> form is geometry — flat-filled silhouette, legible with every hue removed.
+> Gradients may carry depth and light and nothing else: fog, a shaft, the torch
+> pool, the vignette.** If a gradient is describing an edge, it is being used
+> wrong.
+>
+> *What this gives up:* the old rule was checkable by looking for a
+> `linear-gradient`, and the new one is not. In exchange, the layer contract in
+> `content/scenes.json` makes it checkable by *kind* — every layer declares
+> itself `silhouette` or `atmosphere`, and a silhouette layer that reached for a
+> gradient would have to lie about which it was.
+>
+> "One warm light source" and "no continuous glow" both survive unchanged. Fog is
+> static; nothing in a background animates.
+
+### The layer contract
+
+Nine layers, back to front, declared in `content/scenes.json` and composed by
+`app/scene.js`. Odd-numbered are silhouette, even are atmosphere:
+
+`void` · **`far`** · `haze` · **`mid`** · `shaft` · **`near`** · **`floor`** ·
+`glow` · `vignette`
+
+Each silhouette layer declares `max_delta` — the furthest it may step from the
+void. Depth comes from the *ordering* of those steps, not their size, which is
+why a background can be present and still be quiet. Inside a screen's `safe`
+rectangles the step is attenuated, because in a UI this text-dense there is
+nowhere to draw around the content. `tools/shoot.mjs` samples real pixels there
+and fails the build if the result steps harder than the declared ceiling.
 
 ## Color tokens
 
