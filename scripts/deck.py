@@ -65,6 +65,29 @@ def deck_path(repo: str) -> str:
     return paths.deck_path(repo)
 
 
+def game_skeleton(seed: int = 0) -> dict:
+    """The additive `game` block the MCP client owns.
+
+    Shape from design/spire-ai/content-schema.md. It is deliberately separate
+    from the top-level save fields: a plugin with no game client never reads it,
+    and `validate` only checks it when it is present, so decks dealt before the
+    client existed keep loading unchanged.
+    """
+    return {
+        "map_seed": seed,
+        "active_room": None,
+        "energy_max": 3,
+        "hand_size": 5,
+        "nodes_cleared": [],
+        "curses": [],
+        "focus": 0,
+        "annotations": {},
+        "badges": [],
+        "removals": 0,
+        "prior_cache": None,
+    }
+
+
 def skeleton(classes: list[str], floor: int = 0) -> dict:
     """A fresh deck for one or more classes (first is primary)."""
     classes = classes or ["colorless"]
@@ -82,6 +105,7 @@ def skeleton(classes: list[str], floor: int = 0) -> dict:
         "rooms_cleared": [],
         "clean_room_streak": 0,
         "rewards": {"offered": 0, "taken": 0, "skipped": 0},
+        "game": game_skeleton(),
     }
 
 
@@ -153,6 +177,31 @@ def validate(deck: dict) -> list[str]:
         if not isinstance(power, dict) or "event" not in power or "name" not in power:
             errors.append(f"powers[{i}] must be an object with 'event' and 'name'")
 
+    # The game block is optional on purpose. content-schema.md promises a plugin
+    # without a game client ignores it safely, so its absence is never an error —
+    # but a present-and-malformed block is, or the client reads garbage.
+    if "game" in deck:
+        errors.extend(_validate_game(deck["game"]))
+
+    return errors
+
+
+def _validate_game(game: object) -> list[str]:
+    """Schema errors for the optional `game` block."""
+    if not isinstance(game, dict):
+        return [f"'game' must be an object, got {type(game).__name__}"]
+
+    errors: list[str] = []
+    for key in ("energy_max", "hand_size", "focus", "removals", "map_seed"):
+        if key in game and (not isinstance(game[key], int) or isinstance(game[key], bool)):
+            errors.append(f"game.{key} must be an int")
+    for key in ("nodes_cleared", "curses", "badges"):
+        if key in game and not isinstance(game[key], list):
+            errors.append(f"game.{key} must be a list")
+    if "annotations" in game and not isinstance(game["annotations"], dict):
+        errors.append("game.annotations must be an object")
+    if "active_room" in game and not isinstance(game["active_room"], (str, type(None))):
+        errors.append("game.active_room must be a string or null")
     return errors
 
 

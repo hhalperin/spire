@@ -783,12 +783,19 @@ def check_invariants(spire_map: SpireMap) -> list[str]:
 # cli
 # ---------------------------------------------------------------------------
 
+# One glyph vocabulary for the whole project. These are the silhouettes named in
+# design/spire-ai/ui/ENTITY_STANDARDS.md, and the Rust server's terminal renderer
+# uses the same set. Before this, `mapgen.py` printed M/E/R/$/T/? while the client
+# drew ✦/✸/▲/◆/▮/? — two visual languages for the same seven node kinds, and no
+# doc reconciled them.
 GLYPHS = {
-    "monster": "M",
-    "elite": "E",
-    "rest": "R",
-    "shop": "$",
-    "treasure": "T",
+    "monster": "✦",
+    "elite": "✸",
+    "rest": "▲",
+    "shop": "◆",
+    "treasure": "▮",
+    "event": "◇",
+    "boss": "☠",
     "unknown": "?",
 }
 
