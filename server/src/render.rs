@@ -336,7 +336,11 @@ fn choices(room: &Value, state: &Value) -> Option<Vec<String>> {
             }
         }
         out.push(blank());
-        out.push(row("  --option smith|prune|dig   (smith and prune take --card)"));
+        // The tool and its argument names, not `run.py`'s flags. A host reading
+        // this drives the game through `spire_campfire`, and every other screen
+        // here already names ids the way the caller has to send them.
+        out.push(row("  spire_campfire · option: smith | prune | dig"));
+        out.push(row("  smith and prune also take card."));
         return Some(out);
     }
 
@@ -754,9 +758,13 @@ mod tests {
             ],
         });
         let text = super::room(&room, &json!([]), &state());
-        for named in ["Smith", "Prune", "Dig", "--option"] {
+        for named in ["Smith", "Prune", "Dig", "spire_campfire", "option:"] {
             assert!(text.contains(named), "campfire never mentions {named}:\n{text}");
         }
+        // The tool's argument names, not `run.py`'s flags — a host reading this
+        // calls `spire_campfire`, and pointing it at a CLI it never invokes is
+        // worse than saying nothing.
+        assert!(!text.contains("--option"), "the campfire hint names CLI flags:\n{text}");
         // Dig is relic-gated and this save holds none, so it must not read as
         // available — same honesty rule as the map's `legal` flag.
         assert!(text.contains("needs the vendored-fork relic"), "{text}");

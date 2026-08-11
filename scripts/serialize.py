@@ -21,7 +21,7 @@ import deck  # noqa: E402
 import mapgen  # noqa: E402
 from gamedata import card_by_id, content, object_by_id  # noqa: E402
 from rewards import skip_payout  # noqa: E402
-from rooms import build_hand  # noqa: E402
+from rooms import build_hand, ware_detail  # noqa: E402
 from runstate import SOFT_CAP, Run  # noqa: E402
 
 ACT_ROMAN = {1: "I", 2: "II", 3: "III", 4: "IV"}
@@ -169,13 +169,17 @@ def serialize_state(run: Run) -> dict:
 
 
 def shelf(run: Run) -> list[dict]:
-    """The merchant's stock, priced against the focus you hold right now."""
+    """The merchant's stock, priced against the focus you hold right now.
+
+    The ref-to-detail half lives in `rooms.ware_detail`, because a shop *room*
+    needs it too and resolving it in only one of the two places is how the drawn
+    shelf came to list `c-char` where a title belongs. Affordability stays here:
+    it is the only part that depends on the run.
+    """
+    focus = int(run.game.get("focus", 0))
     wares = []
     for ware in content("shop")["wares"]:
-        entry = dict(ware)
-        ref = card_by_id(ware["ref"]) or object_by_id(
-            "relics" if ware["kind"] == "relic" else "potions", ware["ref"])
-        entry["detail"] = ref or {}
-        entry["affordable"] = int(run.game.get("focus", 0)) >= ware["price"]
+        entry = ware_detail(ware)
+        entry["affordable"] = focus >= ware["price"]
         wares.append(entry)
     return wares
