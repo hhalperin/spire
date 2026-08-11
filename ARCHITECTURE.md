@@ -311,6 +311,32 @@ trade are the same operation and reached different lists until the cap started
 counting the pool, at which point every trade a normal player could name was
 refused.
 
+### What a click costs
+
+`engine.rs` spawns a fresh `python3 scripts/run.py <verb>` for *every* tool
+call. That keeps the rule in exactly one place and the server stateless, and it
+means **import cost is paid per click, not once per session** — measured, it is
+roughly 80% of a click, with the actual game logic under 2ms.
+
+So the run loop's imports are a latency budget rather than a matter of taste:
+
+| | |
+| :-- | :-- |
+| bare `python3 -c pass` | ~11ms — the floor, nothing to do about it |
+| what the run loop adds | ~31ms |
+| `dispatch()` itself | ~1.5ms |
+
+Two things are deliberately absent and have a test holding them out
+(`test_run_modules.py`). `dataclasses` pulls `inspect`, about 10ms, and bought
+two class definitions — so `mapgen.Node` is a `NamedTuple` (identical field
+syntax, no import) and `SpireMap` a plain class. And `subprocess` is imported
+inside `acceptance.run_acceptance`, where it is used, rather than at module
+scope where the other fourteen verbs paid ~4ms for a branch they never take.
+
+`argparse` stays despite being the largest remaining item, because the CLI is a
+real contract — skills invoke it and humans debug with it — and hand-rolling a
+parser to save milliseconds would trade the thing this document is about.
+
 **`server/`** is a Rust crate using the official `rmcp` SDK. It declares one
 MCP Apps resource, `ui://spire/app.html` with mimeType
 `text/html;profile=mcp-app`, and fifteen tools that each carry

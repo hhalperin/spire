@@ -15,6 +15,7 @@ import subprocess
 import sys
 
 import deck
+import events
 import mapgen
 import pytest
 import run
@@ -775,11 +776,14 @@ def test_a_curse_changes_the_rooms_that_follow(repo):
 
 
 def test_every_effect_verb_in_content_is_implemented():
-    """A verb nobody applies is a promise the UI makes and the engine breaks."""
-    implemented = {
-        "add_curse", "remove_curse", "gain_relic", "gain_card", "lose_card",
-        "gain_focus", "spend_focus", "require_card", "bump_prior", "log_room",
-    }
+    """A verb nobody applies is a promise the UI makes and the engine breaks.
+
+    `implemented` is read from the engine's own dispatch table, not written out
+    here. It used to be a hand-typed set of ten, which meant renaming a verb in
+    `apply_effects` and leaving content on the old name kept this green — while
+    the event announced a curse, a relic or a card that never arrived.
+    """
+    implemented = set(events.EFFECTS)
     used = {
         effect["verb"]
         for event in run.content("events")["events"]

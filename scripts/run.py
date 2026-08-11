@@ -62,7 +62,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import deck  # noqa: E402
 import mapgen  # noqa: E402
 from acceptance import resolve_command, run_acceptance  # noqa: E402
-from events import apply_effects, choice_is_available  # noqa: E402
+from events import EFFECTS, apply_effects, choice_is_available  # noqa: E402
 from gamedata import CONTENT_DIR, card_by_id, content, object_by_id  # noqa: E402
 from rewards import (  # noqa: E402
     SKIP_PAYOUT,
@@ -106,10 +106,12 @@ __all__ = [
     "CONTENT_DIR",
     "DEFAULT_ENERGY",
     "DEFAULT_HAND",
+    "EFFECTS",
     "HANDLERS",
     "SKIP_PAYOUT",
     "SKIP_PAYOUT_WITH_BOWL",
     "SOFT_CAP",
+    "VERBS",
     "Run",
     "RunError",
     "act_label",
@@ -615,71 +617,67 @@ def cmd_new_run(run: Run, args: argparse.Namespace) -> dict:
 # CLI
 # --------------------------------------------------------------------------- #
 
+# VERBS is the single declaration of the CLI: one row per subcommand, holding
+# its handler, its help line and its flags. The parser and the dispatch table
+# are both derived from it.
+#
+# They used to be two hand-maintained lists of the same fifteen verbs, thirty
+# lines apart — the shape CONTRIBUTING.md warns about, and the one that lets a
+# verb exist in `HANDLERS` with no way to reach it from the CLI. Deriving both
+# from one row makes that unrepresentable rather than merely tested for.
+VERBS: dict[str, tuple[object, str, list[tuple[str, dict]]]] = {
+    "state": (cmd_state, "the whole run", []),
+    "map": (cmd_map, "nodes, legal moves, annotations", []),
+    "enter": (cmd_enter, "open a room", [
+        ("--node", {"required": True}),
+    ]),
+    "hand": (cmd_hand, "legal cards for the active room", []),
+    "play": (cmd_play, "play a card", [
+        ("--card", {"required": True}),
+    ]),
+    "end-turn": (cmd_end_turn, "refill energy, apply the turn effect", []),
+    "acceptance": (cmd_acceptance, "run the room's deterministic check", []),
+    "clear": (cmd_clear, "finish the room", [
+        ("--force", {"action": "store_true", "help": "clear without meeting the target"}),
+        ("--choice", {"help": "event choice id (required in an event room)"}),
+    ]),
+    "flee": (cmd_flee, "abandon the room", [
+        ("--no-notes", {"action": "store_true", "help": "flee without notes; gain Hesitation"}),
+    ]),
+    "reward": (cmd_reward, "resolve a pending offer", [
+        ("--take", {}),
+        ("--skip", {"action": "store_true"}),
+        ("--trade", {"help": "card to remove when at the soft cap"}),
+    ]),
+    "campfire": (cmd_campfire, "smith / prune / dig", [
+        ("--option", {"required": True, "choices": ["smith", "prune", "dig"]}),
+        ("--card", {}),
+    ]),
+    "shop": (cmd_shop, "list or buy", [
+        ("--buy", {}),
+    ]),
+    "annotate": (cmd_annotate, "mark a map node", [
+        ("--node", {"required": True}),
+        ("--mark", {"help": "a short marker, or 'clear' to remove"}),
+    ]),
+    "badges": (cmd_badges, "evaluate end-of-act badges", []),
+    "new-run": (cmd_new_run, "start or restart a climb", [
+        ("--seed", {"type": int, "default": 0}),
+    ]),
+}
+
+HANDLERS = {verb: row[0] for verb, row in VERBS.items()}
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="spire's headless run loop (JSON in/out).")
     parser.add_argument("--path", default=".", help="target repo root (default: .)")
     sub = parser.add_subparsers(dest="command", required=True)
-
-    sub.add_parser("state", help="the whole run")
-    sub.add_parser("map", help="nodes, legal moves, annotations")
-    sub.add_parser("hand", help="legal cards for the active room")
-    sub.add_parser("end-turn", help="refill energy, apply the turn effect")
-    sub.add_parser("acceptance", help="run the room's deterministic check")
-    sub.add_parser("badges", help="evaluate end-of-act badges")
-
-    p_enter = sub.add_parser("enter", help="open a room")
-    p_enter.add_argument("--node", required=True)
-
-    p_play = sub.add_parser("play", help="play a card")
-    p_play.add_argument("--card", required=True)
-
-    p_clear = sub.add_parser("clear", help="finish the room")
-    p_clear.add_argument("--force", action="store_true", help="clear without meeting the target")
-    p_clear.add_argument("--choice", help="event choice id (required in an event room)")
-
-    p_flee = sub.add_parser("flee", help="abandon the room")
-    p_flee.add_argument("--no-notes", action="store_true",
-                        help="flee without notes; gain Hesitation")
-
-    p_reward = sub.add_parser("reward", help="resolve a pending offer")
-    p_reward.add_argument("--take")
-    p_reward.add_argument("--skip", action="store_true")
-    p_reward.add_argument("--trade", help="card to remove when at the soft cap")
-
-    p_camp = sub.add_parser("campfire", help="smith / prune / dig")
-    p_camp.add_argument("--option", required=True, choices=["smith", "prune", "dig"])
-    p_camp.add_argument("--card")
-
-    p_shop = sub.add_parser("shop", help="list or buy")
-    p_shop.add_argument("--buy")
-
-    p_note = sub.add_parser("annotate", help="mark a map node")
-    p_note.add_argument("--node", required=True)
-    p_note.add_argument("--mark", help="a short marker, or 'clear' to remove")
-
-    p_new = sub.add_parser("new-run", help="start or restart a climb")
-    p_new.add_argument("--seed", type=int, default=0)
-
+    for verb, (_handler, help_text, flags) in VERBS.items():
+        child = sub.add_parser(verb, help=help_text)
+        for flag, options in flags:
+            child.add_argument(flag, **options)
     return parser
-
-
-HANDLERS = {
-    "state": cmd_state,
-    "map": cmd_map,
-    "enter": cmd_enter,
-    "hand": cmd_hand,
-    "play": cmd_play,
-    "end-turn": cmd_end_turn,
-    "acceptance": cmd_acceptance,
-    "clear": cmd_clear,
-    "flee": cmd_flee,
-    "reward": cmd_reward,
-    "campfire": cmd_campfire,
-    "shop": cmd_shop,
-    "annotate": cmd_annotate,
-    "badges": cmd_badges,
-    "new-run": cmd_new_run,
-}
 
 
 def dispatch(argv: list[str] | None = None) -> dict:

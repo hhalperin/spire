@@ -17,9 +17,7 @@ import hashlib
 import json
 import pathlib
 import random
-from dataclasses import dataclass, field
-from dataclasses import replace as dc_replace
-from typing import Any
+from typing import NamedTuple
 
 ROWS = 15
 COLS = 7
@@ -186,8 +184,16 @@ def floor_rng(seed: int, floor: int) -> random.Random:
     return random.Random(seed + floor)
 
 
-@dataclass(frozen=True)
-class Node:
+class Node(NamedTuple):
+    """One cell of the grid: where it sits, what it is, where it leads.
+
+    A named tuple rather than a frozen dataclass. The fields and their defaults
+    read identically, and a node genuinely *is* four immutable values — but
+    `dataclasses` imports `inspect`, which is ~10ms, and the Rust server spawns
+    a fresh interpreter for every single tool call. Ten milliseconds on every
+    click is a poor price for two class definitions.
+    """
+
     row: int
     col: int
     kind: str = "monster"
@@ -201,8 +207,8 @@ class Node:
     def id(self) -> str:
         return f"r{self.row}c{self.col}"
 
-    def replace(self, **changes: Any) -> Node:
-        return dc_replace(self, **changes)
+    def replace(self, **changes: object) -> Node:
+        return self._replace(**changes)
 
     def to_dict(self) -> dict:
         return {
@@ -214,16 +220,37 @@ class Node:
         }
 
 
-@dataclass
 class SpireMap:
-    seed: int
-    act: int
-    ascension: int
-    nodes: dict[tuple[int, int], Node]
-    boss: dict
-    rows: int = ROWS
-    cols: int = COLS
-    _unknown: dict[tuple[int, int], dict] = field(default_factory=dict, repr=False)
+    """A generated act: its nodes, its boss, and the unknowns it has resolved."""
+
+    def __init__(self, seed: int, act: int, ascension: int,
+                 nodes: dict[tuple[int, int], Node], boss: dict,
+                 rows: int = ROWS, cols: int = COLS) -> None:
+        self.seed = seed
+        self.act = act
+        self.ascension = ascension
+        self.nodes = nodes
+        self.boss = boss
+        self.rows = rows
+        self.cols = cols
+        self._resolved: dict[tuple[int, int], dict] = {}
+
+    # -- resolved unknowns --------------------------------------------------- #
+    #
+    # An unknown node is rolled once and then frozen, so re-entering it can
+    # never reroll it. The memo is the map's own business, but the save owns
+    # what was rolled *last* session — `runstate.Run.spire_map` replays those
+    # before anyone reads the map. It used to do that by assigning into
+    # `smap._unknown` from another module, which is the sort of reach that keeps
+    # working right up until the field is renamed.
+
+    def remember(self, node: Node, resolution: dict) -> None:
+        """Freeze this node's resolution for the life of the map."""
+        self._resolved[node.key] = resolution
+
+    def recall(self, node: Node) -> dict | None:
+        """What this node already resolved to, or None if it has not."""
+        return self._resolved.get(node.key)
 
     def row_nodes(self, row: int) -> list[Node]:
         return [self.nodes[k] for k in sorted(self.nodes) if k[0] == row]
@@ -675,8 +702,9 @@ def generate(seed: int, act: int, ascension: int = 0) -> SpireMap:
 
 def resolve_unknown(spire_map: SpireMap, node: Node, ramp: Ramp) -> dict:
     """Resolve one unknown node, frozen so re-entering never rerolls."""
-    if node.key in spire_map._unknown:
-        return spire_map._unknown[node.key]
+    already = spire_map.recall(node)
+    if already is not None:
+        return already
 
     rng = floor_rng(act_seed(spire_map.seed, spire_map.act), node.row)
     outcome = "event"
@@ -688,7 +716,7 @@ def resolve_unknown(spire_map: SpireMap, node: Node, ramp: Ramp) -> dict:
         ramp.miss(kind)
 
     result = {"node": node.id, "resolve": outcome}
-    spire_map._unknown[node.key] = result
+    spire_map.remember(node, result)
     return result
 
 

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -81,6 +80,12 @@ def run_acceptance(run: Run, room: dict) -> dict:
     if command is None:
         return {"result": "unconfigured", "detail": acceptance.get("cmd", ""),
                 "reason": "No command configured for this gate. Run /spire:ascend to bind one."}
+
+    # Imported here rather than at module scope: `subprocess` costs ~4ms to
+    # import, this is the only place in the run loop that shells out, and the
+    # Rust server spawns a fresh interpreter per tool call — so at module scope
+    # the other fourteen verbs each paid for a branch they never take.
+    import subprocess
 
     repeats = int(acceptance.get("repeat", 1))
     tail = ""

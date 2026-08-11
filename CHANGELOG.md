@@ -84,6 +84,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `✦/✸/▲/◆/▮/◇/☠`. One glyph vocabulary now, from ENTITY_STANDARDS.
 
 ### Changed
+- **A click costs ~18% less.** `engine.rs` spawns a Python process per tool
+  call, so import cost is paid per click — it was ~80% of one. `mapgen` no
+  longer imports `dataclasses` (which drags in `inspect`, ~10ms, for two class
+  definitions): `Node` is a `NamedTuple` with the same field syntax and
+  `SpireMap` a plain class. `acceptance` imports `subprocess` in the one branch
+  that shells out rather than at module scope. Measured A/B against the previous
+  commit: `state` 64.5→51.7ms, `map` 68.9→57.5ms, `badges` 67.1→54.4ms.
+  `test_run_modules.py` holds both out, since the cost is invisible in review.
+- **One declaration per thing that used to have two.** The CLI parser and the
+  dispatch table are both derived from a single `VERBS` row per subcommand, so a
+  verb can no longer exist in `HANDLERS` with no way to reach it. Event effects
+  are a dispatch table rather than an eighty-line `if/elif`, which makes the set
+  of implemented verbs readable by a test — the one that checks content against
+  the engine was comparing it to a hand-typed list of ten, and would have stayed
+  green if a verb here were renamed while content still used the old name.
+  `card_by_id` / `object_by_id` are dict lookups against an index built once,
+  rather than list scans repeated a few hundred times per `state`.
+- `mapgen.SpireMap` gained `remember` / `recall` for resolved unknown nodes.
+  `runstate` was assigning into `smap._unknown` from another module.
 - **The run loop is seven modules instead of one 1562-line file.**
   `scripts/run.py` keeps the CLI, the dispatch table and the fifteen verbs; the
   rules moved to flat siblings — `gamedata` (content lookup), `runstate`
