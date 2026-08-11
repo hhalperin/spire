@@ -874,4 +874,10 @@ button:focus-visible, [tabindex]:focus-visible {
   .card { width: 124px; height: 172px; }
   .hero-title { font-size: 27px; }
   .skip-main { font-size: 24px; }
+  /* A cost orb hangs 12px above its card, and the fan pushes the outer cards
+     down rather than up — so at sidebar width the leftmost orb landed on the
+     PROGRESS row above it. Only the map was ever shot narrow, so nothing saw
+     this. Buy the orb its clearance back; `shoot.mjs` measures the overlap
+     rather than trusting the number. */
+  .hand { padding-top: 42px; }
 }

@@ -18,6 +18,7 @@ import deck
 import events
 import mapgen
 import pytest
+import rooms
 import run
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1538,3 +1539,46 @@ def test_each_act_composes_a_different_place(repo):
     seed = run.Run(repo).seed
     vectors = [tuple(mapgen.scene_rolls(seed, act, "chamber")) for act in range(1, 6)]
     assert len(set(vectors)) == len(vectors)
+
+
+def shop_node(runner, smap):
+    """A node the engine will build as a shop.
+
+    `resolved_kind` only consults the save for a node whose kind is `unknown`,
+    so forcing an arbitrary node is not enough — floor one is a forced monster.
+    """
+    node = next(n for n in sorted(smap.nodes.values(), key=lambda n: (n.row, n.col))
+                if n.kind == "unknown")
+    runner.game.setdefault("resolved", {})[node.id] = "shop"
+    return node
+
+
+def test_a_shop_room_names_what_it_sells(repo):
+    """Drive `build_room` itself, for a node resolved to a shop.
+
+    Calling `ware_detail` directly would prove the resolver works, which was
+    never in doubt — the bug was that `build_room` did not call it. So this
+    forces a node to resolve as a shop and asserts on the room the engine
+    actually hands back.
+    """
+    runner = run.Run(repo)
+    smap = runner.spire_map()
+    node = shop_node(runner, smap)
+
+    room = rooms.build_room(runner, smap, node)
+    assert room["wares"], "a shop room with nothing in it"
+    for ware in room["wares"]:
+        detail = ware.get("detail") or {}
+        assert detail.get("title") or detail.get("name"), (
+            f"{ware['ref']} arrives with no name, so the drawn shelf shows its ref"
+        )
+
+
+def test_the_shelf_and_a_shop_room_agree_about_every_ware(repo):
+    """Two callers, one resolver — they cannot drift apart again."""
+    runner = run.Run(repo)
+    smap = runner.spire_map()
+    by_id = {w["id"]: w for w in rooms.build_room(runner, smap, shop_node(runner, smap))["wares"]}
+
+    for shelved in run.shelf(runner):
+        assert by_id[shelved["id"]]["detail"] == shelved["detail"], shelved["id"]

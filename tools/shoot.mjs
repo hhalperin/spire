@@ -567,9 +567,44 @@ await pass('narrow', async () => {
   await page.waitForTimeout(400);
   await view(page).locator('.mnode.legal').first().waitFor({ timeout: 15000 });
   await shoot(page, 'map-narrow');
-  const overflow = await inside(page, () =>
+  const scrolls = async () => inside(page, () =>
     document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
-  if (overflow) failures.push('narrow: the body scrolls horizontally at 420px');
+  if (await scrolls()) failures.push('narrow: the map scrolls horizontally at 420px');
+
+  /* Combat, at sidebar width. Only the map was ever shot narrow, so the screen
+     with a row of fixed-width cards in it — the one most likely to overflow —
+     was the one nobody measured. `.hand` is a non-wrapping flex row whose
+     overlap is chosen by card count rather than by container width. */
+  await view(page).locator('.mnode.legal').first().click();
+  await view(page).locator('[data-action="enter"]').click();
+  await view(page).locator('.enemy').waitFor({ timeout: 15000 });
+  const begin = view(page).locator('[data-action="reveal"]');
+  if (await begin.count()) await begin.click();
+  await view(page).locator('.hand .card').first().waitFor({ timeout: 15000 });
+  await page.waitForTimeout(300);
+  await shoot(page, 'combat-narrow');
+  if (await scrolls()) failures.push('narrow: combat scrolls horizontally at 420px');
+
+  /* Horizontal scroll was the wrong thing to measure. The layout does hold its
+     width at 420px — and the screen was still wrong, because a cost orb hangs
+     12px above its card and landed on top of the PROGRESS row. A check that
+     only asks "does the body scroll" passes happily through that, which is the
+     same shape of miss as a test that asserts the wrong invariant. Ask instead
+     whether anything overlaps what it should sit below. */
+  const collision = await inside(page, () => {
+    const meter = document.querySelector('.meter');
+    if (!meter) return null;
+    const row = meter.getBoundingClientRect();
+    for (const orb of document.querySelectorAll('.card .cost')) {
+      const box = orb.getBoundingClientRect();
+      const overlap = Math.min(row.bottom, box.bottom) - Math.max(row.top, box.top);
+      if (overlap > 1) return Math.round(overlap);
+    }
+    return null;
+  });
+  if (collision) {
+    failures.push(`narrow: a card cost orb overlaps the progress row by ${collision}px at 420px`);
+  }
   await page.context().close();
 });
 
@@ -619,7 +654,7 @@ stopHost();
    counting whatever happened to be taken. A count cannot tell "we photographed
    everything" from "we photographed the easy ones twice". */
 const REQUIRED = [
-  'map-narrow', 'map-greyscale', 'combat-greyscale', 'map-reduced-motion',
+  'map-narrow', 'combat-narrow', 'map-greyscale', 'combat-greyscale', 'map-reduced-motion',
   ...['dark', 'light'].flatMap((theme) => [
     'title', 'map', 'map-annotated', 'intent', 'combat', 'combat-played',
     'acceptance', 'reward', 'deck', 'badges', 'campfire', 'shop',

@@ -82,6 +82,7 @@ from rooms import (  # noqa: E402
     pick_event,
     roll_treasure,
     sensor_backed,
+    ware_detail,
 )
 from runstate import (  # noqa: E402
     DEFAULT_ENERGY,
@@ -142,6 +143,7 @@ __all__ = [
     "serialize_state",
     "shelf",
     "skip_payout",
+    "ware_detail",
 ]
 
 

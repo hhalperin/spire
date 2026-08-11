@@ -16,9 +16,10 @@ use std::future::Future;
 
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
-    Annotated, CallToolRequestParams, CallToolResult, Content, Implementation, ListResourcesResult,
-    ListToolsResult, PaginatedRequestParams, ProtocolVersion, RawResource, ReadResourceRequestParams,
-    ReadResourceResult, ResourceContents, ServerCapabilities, ServerInfo,
+    CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, Implementation,
+    ListResourcesResult, ListToolsResult, PaginatedRequestParams, ProtocolVersion,
+    ReadResourceRequestParams, ReadResourceResponse, ReadResourceResult, Resource,
+    ResourceContents, ServerCapabilities, ServerInfo,
 };
 use rmcp::service::RequestContext;
 use rmcp::{ErrorData as McpError, RoleServer};
@@ -52,7 +53,7 @@ impl Spire {
 /// exists to keep out of the transcript.
 fn result_from(spec: Option<&tools::ToolSpec>, payload: Value, text: String) -> CallToolResult {
     let is_error = payload.get("ok") == Some(&Value::Bool(false));
-    let mut result = CallToolResult::success(vec![Content::text(text)]);
+    let mut result = CallToolResult::success(vec![ContentBlock::text(text)]);
     result.structured_content = Some(payload);
     result.is_error = Some(is_error);
     // The host reads this to know which view renders the result in its place,
@@ -196,7 +197,12 @@ impl ServerHandler for Spire {
         implementation.website_url = Some("https://github.com/hhalperin/spire".to_string());
 
         let mut info = ServerInfo::default();
-        info.protocol_version = ProtocolVersion::default();
+        // Named, not `ProtocolVersion::default()`. In rmcp 3.1.2 `LATEST` is
+        // still `2025-11-25`, so the default would understate what this server
+        // speaks — and the value only looked right before because the SDK
+        // echoes back any client version it recognises. Older hosts still
+        // negotiate down; this is the ceiling, not a floor.
+        info.protocol_version = ProtocolVersion::V_2026_07_28;
         let mut capabilities = ServerCapabilities::builder()
             .enable_tools()
             .enable_resources()
@@ -229,7 +235,8 @@ impl ServerHandler for Spire {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> impl Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
-        std::future::ready(Ok(ListToolsResult::with_all_items(tools::model_tools())))
+        let has_app = client_renders_the_app(&_context);
+        std::future::ready(Ok(ListToolsResult::with_all_items(tools::tools_for(has_app))))
     }
 
     fn list_resources(
@@ -237,31 +244,29 @@ impl ServerHandler for Spire {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> impl Future<Output = Result<ListResourcesResult, McpError>> + Send + '_ {
-        std::future::ready(Ok(ListResourcesResult::with_all_items(vec![Annotated::new(
-                RawResource {
-                    uri: APP_URI.to_string(),
-                    name: "spire".to_string(),
-                    title: Some("Spire".to_string()),
-                    description: Some(
-                        "The Spire game client: map, room, hand, reward, campfire, shop."
-                            .to_string(),
-                    ),
-                    mime_type: Some(APP_MIME.to_string()),
-                    size: Some(APP_HTML.len() as u32),
-                    icons: None,
-                    meta: Some(tools::resource_meta()),
-                },
-                None,
-            )])))
+        // rmcp 3 flattened `Annotated<RawResource>` into `Resource`, with the
+        // annotations inline and `size` widened to u64.
+        let mut resource = Resource::new(APP_URI, "spire")
+            .with_title("Spire")
+            .with_description(
+                "The Spire game client: map, room, hand, reward, campfire, shop.",
+            )
+            .with_mime_type(APP_MIME);
+        resource.size = Some(APP_HTML.len() as u64);
+        resource.meta = Some(tools::resource_meta());
+        std::future::ready(Ok(ListResourcesResult::with_all_items(vec![resource])))
     }
 
     fn read_resource(
         &self,
         request: ReadResourceRequestParams,
         _context: RequestContext<RoleServer>,
-    ) -> impl Future<Output = Result<ReadResourceResult, McpError>> + Send + '_ {
+    ) -> impl Future<Output = Result<ReadResourceResponse, McpError>> + Send + '_ {
         let found = request.uri == APP_URI;
         std::future::ready(if found {
+            // `ReadResourceResponse` is the MRTR envelope in rmcp 3: a read can
+            // now also ask for input or hand back a task. This one always
+            // completes, so it is the `Complete` variant via `From`.
             Ok(ReadResourceResult::new(vec![
                 ResourceContents::TextResourceContents {
                     uri: APP_URI.to_string(),
@@ -269,7 +274,8 @@ impl ServerHandler for Spire {
                     text: APP_HTML.to_string(),
                     meta: Some(tools::resource_meta()),
                 },
-            ]))
+            ])
+            .into())
         } else {
             Err(McpError::resource_not_found(
                 format!("no resource at {}", request.uri),
@@ -282,7 +288,7 @@ impl ServerHandler for Spire {
         &self,
         request: CallToolRequestParams,
         _context: RequestContext<RoleServer>,
-    ) -> Result<CallToolResult, McpError> {
+    ) -> Result<CallToolResponse, McpError> {
         {
             let Some(spec) = tools::spec(&request.name) else {
                 let payload = engine::error_value(
@@ -290,7 +296,7 @@ impl ServerHandler for Spire {
                     format!("spire has no tool named {}", request.name),
                 );
                 let text = render_payload("", &payload);
-                return Ok(result_from(None, payload, text));
+                return Ok(result_from(None, payload, text).into());
             };
 
             let args = request
@@ -301,9 +307,32 @@ impl ServerHandler for Spire {
             let command = argv[0].clone();
             let payload = engine::call(&argv).await;
             let text = render_payload(&command, &payload);
-            Ok(result_from(Some(spec), payload, text))
+            Ok(result_from(Some(spec), payload, text).into())
         }
     }
+}
+
+/// Did this client tell us it can render the app?
+///
+/// There are two places to ask, because there are two lifecycles. Under
+/// 2026-07-28 there is no handshake to remember: the client restates its
+/// capabilities in `_meta` on every request, which is exactly what makes the
+/// protocol stateless. Under the older lifecycle they were stated once at
+/// `initialize` and the peer holds them.
+///
+/// Checking both is what lets one server answer honestly to a 2026-07-28 host,
+/// a 2025-11-25 host, and Claude Code — which declares no extensions at all and
+/// therefore, correctly, gets the full toolkit.
+/// `RequestContext::client_capabilities` is rmcp's own resolver for this and
+/// gets a subtlety right that a hand-rolled "check meta, else check the peer"
+/// does not: once a connection is stateless, the peer holds no handshake to
+/// fall back to, and consulting it anyway would answer from another request's
+/// state. Reading the SDK's version rather than reimplementing it is the point.
+fn client_renders_the_app(context: &RequestContext<RoleServer>) -> bool {
+    context
+        .client_capabilities()
+        .and_then(|caps| caps.extensions)
+        .is_some_and(|ext| ext.contains_key(UI_EXTENSION))
 }
 
 /// The extension block a server advertises so an Apps-capable host knows to

@@ -8,7 +8,13 @@
 //!
 //! Unicode box drawing only — no ANSI escapes. A host that does not interpret
 //! escapes would print them as literal garbage, and this text is read by a model
-//! as often as by a person.
+//! as often as by a person. It also has to survive a *chat panel*: the VS Code
+//! extension renders tool output as markdown in a conversation, not a terminal,
+//! which is a second reason escapes are out and fixed-width glyphs are in.
+//!
+//! Every room draws its own choices. A rest, chest or shop room carries
+//! `options` / `offer` / `wares` rather than `intents`, and where there is no
+//! app this text *is* the screen, not a summary of it — see `choices`.
 //!
 //! Glyphs come from `design/spire-ai/ui/ENTITY_STANDARDS.md`. The silhouette
 //! carries the meaning so the surface survives having no colour at all, which is
@@ -298,6 +304,90 @@ fn intent_line(intent: &Value) -> String {
     format!("{mark}{magnitude}  {}{sensor}", str_of(intent, "text"))
 }
 
+/// The choices a rest, chest or shop room offers, or None if it is a fight.
+///
+/// Each returns the verb the player has to name, because in a text host there
+/// is nothing to click: the id in brackets is the argument. The three rooms
+/// share a shape — a heading, then rows of "what it is / what it costs / what
+/// to say" — so they share a function.
+fn choices(room: &Value, state: &Value) -> Option<Vec<String>> {
+    let empty = vec![];
+    let mut out = Vec::new();
+
+    if let Some(options) = room.get("options").and_then(Value::as_array) {
+        out.push(row("CAMPFIRE · one of these, then the floor is spent"));
+        out.push(blank());
+        let relics = state.get("relics").and_then(Value::as_array).unwrap_or(&empty);
+        for option in options {
+            // Dig is gated on a relic. Listing it as available to a player who
+            // cannot take it is the same lie the map's `legal` flag exists to
+            // avoid, so it is marked rather than hidden.
+            let needs = str_of(option, "requires_relic");
+            let held = needs.is_empty()
+                || relics.iter().any(|r| str_of(r, "id") == needs);
+            let mark = if held { "▸" } else { "·" };
+            out.push(row(&format!(
+                "{mark} {}  {}",
+                pad(str_of(option, "name"), 8),
+                str_of(option, "blurb")
+            )));
+            if !held {
+                out.push(row(&format!("    needs the {needs} relic")));
+            }
+        }
+        out.push(blank());
+        // The tool and its argument names, not `run.py`'s flags. A host reading
+        // this drives the game through `spire_campfire`, and every other screen
+        // here already names ids the way the caller has to send them.
+        out.push(row("  spire_campfire · option: smith | prune | dig"));
+        out.push(row("  smith and prune also take card."));
+        return Some(out);
+    }
+
+    if let Some(offer) = room.get("offer").filter(|v| !v.is_null()) {
+        let title = str_of(offer, "title");
+        if title.is_empty() && str_of(offer, "ref").is_empty() {
+            return None;
+        }
+        out.push(row("CHEST · what is inside is already decided"));
+        out.push(blank());
+        out.push(row(&format!(
+            "◇ {}  ({})",
+            if title.is_empty() { str_of(offer, "ref") } else { title },
+            str_of(offer, "kind")
+        )));
+        for line in wrap(str_of(offer, "body"), W - 8) {
+            out.push(row(&format!("    {line}")));
+        }
+        out.push(blank());
+        out.push(row("  Clear the room, then take or skip the offer."));
+        return Some(out);
+    }
+
+    if let Some(wares) = room.get("wares").and_then(Value::as_array) {
+        out.push(row(&format!(
+            "THE MERCHANT   you hold ◈{}",
+            int_of(state, "focus")
+        )));
+        out.push(blank());
+        for ware in wares {
+            let detail = ware.get("detail").cloned().unwrap_or(Value::Null);
+            out.push(row(&format!(
+                "· ◈{}  {}  ({})  [{}]",
+                int_of(ware, "price"),
+                pad(ware_label(&detail, ware), 22),
+                str_of(ware, "kind"),
+                str_of(ware, "id")
+            )));
+        }
+        out.push(blank());
+        out.push(row("  spire_shop_list prices these against the focus you hold."));
+        return Some(out);
+    }
+
+    None
+}
+
 pub fn room(room: &Value, hand: &Value, state: &Value) -> String {
     let mut out = vec![top()];
     out.extend(chrome(state));
@@ -316,6 +406,19 @@ pub fn room(room: &Value, hand: &Value, state: &Value) -> String {
     if !str_of(room, "blurb").is_empty() {
         out.push(blank());
         out.push(row(str_of(room, "blurb")));
+    }
+
+    // A rest, chest or shop room offers choices rather than a fight, and those
+    // choices are the screen. They used to be dropped: `render_payload` routes
+    // every non-map verb here, and this function read `intents` and nothing
+    // else — so entering a campfire drew its name, then "INTENT: none shown",
+    // and never mentioned smith, prune or dig. In a host that cannot render the
+    // app this text *is* the game, so the room was unplayable by reading.
+    if let Some(lines) = choices(room, state) {
+        out.push(rule('─'));
+        out.extend(lines);
+        out.push(bottom());
+        return out.join("\n");
     }
 
     // intent.md: the threat owns the hero region, before the hand is usable.
@@ -636,6 +739,74 @@ mod tests {
             "cards": [], "relics": [], "powers": [], "curses": [],
             "removal_cost": 3
         })
+    }
+
+    /// The three rooms that offer choices instead of a fight.
+    ///
+    /// Each of these drew its name and then "INTENT: none shown", which in a
+    /// host with no app is the whole screen — the player was told a campfire
+    /// exists and never told what it does.
+    #[test]
+    fn a_campfire_names_what_it_offers() {
+        let room = json!({
+            "kind": "rest", "name": "Campfire", "room_type": "orient", "intents": [],
+            "options": [
+                {"id": "smith", "name": "Smith", "blurb": "Upgrade one card, permanently."},
+                {"id": "prune", "name": "Prune", "blurb": "Remove one card from the deck."},
+                {"id": "dig", "name": "Dig", "blurb": "Draw one relic.",
+                 "requires_relic": "vendored-fork"},
+            ],
+        });
+        let text = super::room(&room, &json!([]), &state());
+        for named in ["Smith", "Prune", "Dig", "spire_campfire", "option:"] {
+            assert!(text.contains(named), "campfire never mentions {named}:\n{text}");
+        }
+        // The tool's argument names, not `run.py`'s flags — a host reading this
+        // calls `spire_campfire`, and pointing it at a CLI it never invokes is
+        // worse than saying nothing.
+        assert!(!text.contains("--option"), "the campfire hint names CLI flags:\n{text}");
+        // Dig is relic-gated and this save holds none, so it must not read as
+        // available — same honesty rule as the map's `legal` flag.
+        assert!(text.contains("needs the vendored-fork relic"), "{text}");
+        assert!(!text.contains("INTENT"), "a campfire has no intent to show:\n{text}");
+    }
+
+    #[test]
+    fn a_chest_says_what_is_in_it() {
+        let room = json!({
+            "kind": "treasure", "name": "Chest", "room_type": "orient", "intents": [],
+            "offer": {"id": "t-singing-bowl", "ref": "singing-bowl", "kind": "relic",
+                      "title": "Singing Bowl", "body": "Skipping pays ◈2 instead of ◈1."},
+        });
+        let text = super::room(&room, &json!([]), &state());
+        assert!(text.contains("Singing Bowl"), "{text}");
+        assert!(text.contains("Skipping pays"), "{text}");
+    }
+
+    #[test]
+    fn a_shop_room_lists_its_stock() {
+        let room = json!({
+            "kind": "shop", "name": "The Merchant", "room_type": "orient", "intents": [],
+            "wares": [{"id": "w-ftf", "ref": "c-ftf", "kind": "card", "price": 12,
+                       "detail": {"title": "Failing Test First"}}],
+        });
+        let text = super::room(&room, &json!([]), &state());
+        assert!(text.contains("Failing Test First"), "{text}");
+        assert!(text.contains("◈12"), "{text}");
+    }
+
+    /// A fight still draws as a fight — the choice block must not swallow it.
+    #[test]
+    fn a_room_with_no_choices_still_shows_its_intent() {
+        let room = json!({
+            "kind": "monster", "name": "Flaky Suite", "room_type": "bug",
+            "clear_at": 3, "progress": 0, "energy": 3, "energy_max": 3, "turn": 1,
+            "intents": [{"kind": "attack", "tier": 4, "sensor": "tests_failing",
+                         "text": "Will fail CI randomly."}],
+        });
+        let text = super::room(&room, &json!([]), &state());
+        assert!(text.contains("INTENT"), "{text}");
+        assert!(text.contains("PROGRESS"), "{text}");
     }
 
     #[test]

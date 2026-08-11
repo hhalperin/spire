@@ -19,7 +19,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mapgen  # noqa: E402
-from gamedata import card_by_id, content  # noqa: E402
+from gamedata import card_by_id, content, object_by_id  # noqa: E402
 from rewards import draw_from_treasure  # noqa: E402
 from runstate import Run  # noqa: E402
 
@@ -123,7 +123,8 @@ def build_room(run: Run, smap: mapgen.SpireMap, node: mapgen.Node) -> dict:
                      "intents": []})
     elif kind == "shop":
         room.update({"name": "The Merchant", "room_type": "orient",
-                     "wares": content("shop")["wares"], "intents": []})
+                     "wares": [ware_detail(w) for w in content("shop")["wares"]],
+                     "intents": []})
     elif kind == "rest":
         room.update({"name": "Campfire", "room_type": "orient",
                      "options": content("shop")["campfire"]["options"], "intents": []})
@@ -131,6 +132,21 @@ def build_room(run: Run, smap: mapgen.SpireMap, node: mapgen.Node) -> dict:
         room.update({"name": "Chest", "room_type": "orient",
                      "offer": roll_treasure(run, node), "intents": []})
     return room
+
+
+def ware_detail(ware: dict) -> dict:
+    """A shop ware with the thing it refers to attached.
+
+    `content/shop.json` stores a ware as id, ref, kind and price — enough to sell
+    it, not enough to name it. The merchant *screen* resolved the ref itself, so
+    entering a shop node handed the room raw wares and the drawn shelf listed
+    `c-char` where a title belongs. One resolver, used by both, so the room and
+    the shelf cannot disagree about what a ware is called.
+    """
+    entry = dict(ware)
+    bucket = "relics" if ware["kind"] == "relic" else "potions"
+    entry["detail"] = card_by_id(ware["ref"]) or object_by_id(bucket, ware["ref"]) or {}
+    return entry
 
 
 def roll_treasure(run: Run, node: mapgen.Node) -> dict:

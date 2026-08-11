@@ -79,14 +79,20 @@ class Session:
         self.proc.stdin.write(json.dumps(payload) + "\n")
         self.proc.stdin.flush()
 
-    def initialize(self) -> dict:
+    def initialize(self, renders_app: bool = True) -> dict:
+        """Open the session, optionally as a host that cannot render the app.
+
+        `renders_app=False` is the Claude Code shape: a client that declares no
+        extensions at all. The tool surface it is offered differs, deliberately.
+        """
+        capabilities: dict = {}
+        if renders_app:
+            capabilities["extensions"] = {
+                "io.modelcontextprotocol/ui": {"mimeTypes": [APP_MIME]},
+            }
         result = self.request("initialize", {
             "protocolVersion": PROTOCOL_VERSION,
-            "capabilities": {
-                "extensions": {
-                    "io.modelcontextprotocol/ui": {"mimeTypes": [APP_MIME]},
-                },
-            },
+            "capabilities": capabilities,
             "clientInfo": {"name": "spire-tests", "version": "0"},
         })
         self.notify("notifications/initialized")
@@ -129,8 +135,37 @@ def test_the_server_initializes_and_names_itself(tmp_path):
         assert result["serverInfo"]["name"] == "spire"
         assert "tools" in result["capabilities"]
         assert "resources" in result["capabilities"]
-        assert "one room at a time" not in result.get("instructions", "").lower() or True
         assert "spire_get_run" in result["instructions"]
+
+        # The extension block was never asserted here, only in the Rust unit
+        # test, so the live handshake was free to stop advertising the app.
+        extensions = result["capabilities"]["extensions"]
+        assert extensions["io.modelcontextprotocol/ui"]["mimeTypes"] == [APP_MIME]
+
+        # Note what is deliberately NOT asserted: `result["protocolVersion"]`.
+        # The SDK echoes back whatever version the client asked for when it
+        # recognises it, so that field agrees with us no matter what the server
+        # declares — it passed while `get_info` named 2025-11-25. The server's
+        # own choice is only observable as the fallback, below.
+    finally:
+        live.close()
+
+
+def test_the_declared_version_is_the_one_we_chose(tmp_path):
+    """What the server falls back to when it does not know what was asked.
+
+    This is the only place `get_info`'s `protocol_version` is visible on the
+    wire. Asserting the handshake's echoed value instead looks like the same
+    check and is worth nothing: it agrees with the client by construction.
+    """
+    live = Session(str(tmp_path))
+    try:
+        reply = live.request("initialize", {
+            "protocolVersion": "1999-01-01",
+            "capabilities": {},
+            "clientInfo": {"name": "from-the-future", "version": "0"},
+        })
+        assert reply["result"]["protocolVersion"] == PROTOCOL_VERSION
     finally:
         live.close()
 
@@ -282,3 +317,109 @@ def test_badges_are_reported_over_the_protocol(session):
     payload = session.payload("spire_badges")
     assert payload["ok"] is True
     assert isinstance(payload["badges"], list)
+
+
+# --------------------------------------------------------------------------- #
+# hosts that cannot render the app
+# --------------------------------------------------------------------------- #
+
+@pytest.fixture
+def plain_session(tmp_path, monkeypatch):
+    """A session from a client that declares no extensions — the Claude Code shape."""
+    monkeypatch.setenv("SPIRE_TODAY", "2026-07-24")
+    deck.save(str(tmp_path), deck.skeleton(["defect"]))
+    live = Session(str(tmp_path))
+    live.initialize(renders_app=False)
+    yield live
+    live.close()
+
+
+def test_a_host_without_the_app_is_offered_every_verb(plain_session):
+    """The click tools are hidden to keep them out of an agent's transcript.
+
+    That is only right when the agent has a UI to click them in. MCP Apps is not
+    supported by Claude Code, so hiding them there left no way to play a card,
+    end a turn or read the hand.
+    """
+    names = {t["name"] for t in plain_session.request("tools/list", {})["result"]["tools"]}
+    for needed in ("spire_play_card", "spire_end_turn", "spire_list_hand", "spire_annotate_node"):
+        assert needed in names, f"{needed} is hidden from a host that cannot click it"
+
+
+def test_a_fight_room_can_be_cleared_without_the_app(plain_session):
+    """The bug, as a test: enter a fight and finish it using only listed tools.
+
+    `spire_clear_or_flee` refuses while progress is short of `clear_at`, and no
+    tool exposes `--force`. With the click tools hidden this room could be
+    entered and then only fled — and monster, elite and boss are most of the map.
+    Every call here goes through a tool the server actually offered.
+    """
+    offered = {t["name"] for t in plain_session.request("tools/list", {})["result"]["tools"]}
+
+    smap = plain_session.payload("spire_map_refresh")["map"]
+    fight = next(
+        n for n in smap["nodes"]
+        if n["row"] == 0 and (n["resolved"] or n["kind"]) in {"monster", "elite"}
+    )
+    room = plain_session.payload("spire_enter_node", {"node": fight["id"]})["room"]
+    assert "clear_at" in room, "expected a room that needs progress"
+
+    for _ in range(12):
+        assert "spire_list_hand" in offered
+        hand = plain_session.payload("spire_list_hand")
+        room = hand["room"]
+        if room["progress"] >= room["clear_at"]:
+            break
+        playable = next((c for c in hand["hand"] if c["playable"] and c["progress"] > 0), None)
+        if playable is None:
+            assert "spire_end_turn" in offered
+            plain_session.payload("spire_end_turn")
+            continue
+        assert "spire_play_card" in offered
+        plain_session.payload("spire_play_card", {"card": playable["id"]})
+
+    assert room["progress"] >= room["clear_at"], (
+        f"could not reach {room['clear_at']} progress with the offered tools"
+    )
+    cleared = plain_session.payload("spire_clear_or_flee", {"action": "clear"})
+    assert cleared["ok"] is True, cleared
+    assert cleared["state"]["floor"] == 1
+
+
+def test_the_server_answers_discover_with_no_handshake_at_all(tmp_path):
+    """2026-07-28's stateless core: no `initialize`, no session, no state.
+
+    A client may open with `server/discover` and restate who it is in `_meta` on
+    every request. That is the whole point of the stateless revision — any
+    instance can answer any request — and it is the shape spire was already
+    built for, since the server holds no game state and re-reads its config per
+    call. Nothing exercised it, so nothing would have noticed it regressing.
+    """
+    live = Session(str(tmp_path))
+    try:
+        reply = live.request("server/discover", {"_meta": {
+            "io.modelcontextprotocol/protocolVersion": PROTOCOL_VERSION,
+            "io.modelcontextprotocol/clientCapabilities": {"extensions": {}},
+            "io.modelcontextprotocol/clientInfo": {"name": "stateless", "version": "0"},
+        }})
+        result = reply["result"]
+        assert PROTOCOL_VERSION in result["supportedVersions"]
+        assert result["capabilities"]["extensions"]["io.modelcontextprotocol/ui"]
+        assert "tools" in result["capabilities"]
+    finally:
+        live.close()
+
+
+def test_older_hosts_still_negotiate_down(tmp_path):
+    """Declaring 2026-07-28 is a ceiling, not a floor."""
+    for version in ("2025-11-25", "2025-06-18"):
+        live = Session(str(tmp_path))
+        try:
+            reply = live.request("initialize", {
+                "protocolVersion": version,
+                "capabilities": {},
+                "clientInfo": {"name": "old-host", "version": "0"},
+            })
+            assert reply["result"]["protocolVersion"] == version
+        finally:
+            live.close()
