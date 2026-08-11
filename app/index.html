@@ -8,9 +8,21 @@
   <!-- No external origins. Fonts are inlined by tools/build-app.mjs, which is
        what lets the ui:// resource declare an empty CSP allowlist. -->
   <link rel="stylesheet" href="fonts.css" />
+  <link rel="stylesheet" href="scene.css" />
   <link rel="stylesheet" href="app.css" />
 </head>
 <body>
+  <!-- The scene. Silhouette layers are inserted here by app/scene.js; the
+       atmosphere layers are static elements the stylesheet paints. Sits at
+       z-index 0, behind .shell, and is aria-hidden because it carries no
+       information a screen reader could use. -->
+  <div id="scene" aria-hidden="true">
+    <div class="sc-haze"></div>
+    <div class="sc-shaft"></div>
+    <div class="sc-glow"></div>
+    <div class="sc-vignette"></div>
+  </div>
+
   <div class="shell">
     <header class="topbar">
       <span class="wordmark">SPIRE</span>

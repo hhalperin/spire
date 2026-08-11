@@ -30,3 +30,9 @@ Persistent top banner on Map and any non-room facet while `active_room != null`:
 | Name the room | Vague “busy” spinner |
 | One-click return | Allow shadow multitask |
 | Confirm flee | Silent cancel |
+
+## Background
+
+None. The active-room banner is an overlay, not a screen — it sits on top of whatever scene the room behind it declared, and must stay readable against every one of them. That is why the banner carries its own opaque surface rather than trusting the background beneath it.
+
+If you ever make the banner translucent, it needs a safe rectangle in `content/scenes.json` for every scene it can appear over, and `tools/shoot.mjs`'s contrast check has to sample there.

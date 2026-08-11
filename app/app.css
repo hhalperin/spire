@@ -9,10 +9,13 @@
  *
  * What survives from v0 unchanged, because it was right:
  *   - one accent at a time (facet accent OR class accent, never both competing)
- *   - geometry over gradients
  *   - a motion budget of 2-3 beats per facet, and no continuous glow
  *   - silhouette before colour: every entity is identifiable in greyscale
  *   - Skip is never styled as the disabled option
+ *
+ * "Geometry over gradients" survives amended rather than intact: structure is
+ * always geometry, and gradients carry depth and light only, never form. The
+ * amendment is recorded in DESIGN_SYSTEM.md; scene.css is where it is spent.
  *
  * Theme resolution is three-state on purpose. An MCP App host sends
  * hostContext.theme, which lands on [data-theme]; with no host, prefers-color-scheme
@@ -206,20 +209,11 @@ body {
   min-height: 100vh;
 }
 
-/* The torchlight. One warm pool at the top of the shaft, tinted to whatever
-   facet you are in — this is what stops the page reading as a document. */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background:
-    radial-gradient(120% 70% at 50% -12%,
-      color-mix(in srgb, var(--facet) 22%, transparent), transparent 62%),
-    radial-gradient(90% 60% at 50% 115%, rgba(0, 0, 0, .55), transparent 60%);
-  transition: background var(--t-slow) var(--ease);
-}
+/* The torchlight used to live here as body::before — one facet-tinted radial,
+   the whole atmosphere the client had. It now lives in scene.css as `.sc-glow`,
+   one layer of a nine-layer stack, so the warm pool can move with the scene
+   instead of always coming from the top of the page. Same light, same rule:
+   one warm source, no continuous glow. */
 
 button { font: inherit; color: inherit; cursor: pointer; }
 button:focus-visible, [tabindex]:focus-visible {

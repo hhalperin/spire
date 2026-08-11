@@ -691,6 +691,28 @@ def act_label(act: int) -> str:
     return f"Act {act} · endless"
 
 
+def scene_table(seed: int, act: int) -> dict[str, list[float]]:
+    """The float vector the background composer walks, for every scene in an act.
+
+    The client has no RNG — same contract as `mapgen.unknown_rolls`, and for the
+    same reason. It rides on the *map* rather than on the state because that is
+    the payload with the matching lifetime: scene rolls depend on the seed and
+    the act and nothing else, and the map is exactly what the client refetches
+    when the act changes. Putting it on the state would repeat six kilobytes of
+    dice on every card played; shipping only the current scene would leave the
+    deck and badges screens undrawable, since the engine never sees them.
+
+    Rounded to three places. The composer's thresholds are coarse — how many
+    pillars, which slot, which variant — so the fourth decimal cannot change a
+    pixel, and dropping it is a third of the bytes.
+    """
+    names = [name for name in content("scenes")["scenes"] if not name.startswith("_")]
+    return {
+        name: [round(value, 3) for value in mapgen.scene_rolls(seed, act, name)]
+        for name in names
+    }
+
+
 def serialize_map(run: Run) -> dict:
     smap = run.spire_map()
     current = run.current_node(smap)
@@ -723,6 +745,7 @@ def serialize_map(run: Run) -> dict:
         "fingerprint": smap.fingerprint(),
         "current": current.id if current else None,
         "nodes": nodes,
+        "scene_rolls": scene_table(run.seed, run.act),
     }
 
 

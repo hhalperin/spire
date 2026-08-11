@@ -36,6 +36,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`design/spire-ai/sts-fidelity.md` Part 6** — the Slay the Spire 2 ledger,
   one verdict per system.
 
+### Added — scene backgrounds
+
+- **`content/scenes.json`** — a wireframe per scene, as data: nine layers, ten
+  places, eighteen components, five biomes, and the safe rectangles content sits
+  in. It is not documentation about the backgrounds; it is their source.
+- **`app/scene.js` + `app/scene.css`** — the composer. Silhouette layers are
+  generated SVG, atmosphere layers are CSS gradients, and `mountScene` weaves
+  them in the declared order so the fog genuinely sits between the distance and
+  the architecture. No image assets, because an MCP App has no external origin to
+  fetch one from — which is why this is a grammar and not an asset pipeline.
+- **Per act × scene variation, with no client RNG.** `mapgen.scene_rolls` seeds a
+  fixed float vector from the run seed and the act; `run.py` ships it on the map
+  payload. Re-entering a floor is not similar to last time, it is the same
+  picture. Act I's chamber and Act III's are the same room in different worlds.
+- **`tools/scenes.mjs`** — the gallery: every scene as a labelled wireframe and
+  as composed art, per act, drawn from the same object the client reads, using
+  rolls from the same function the engine ships.
+- **A legibility check on real pixels.** `tools/shoot.mjs` photographs the
+  composed background inside every safe rectangle and fails if the local
+  luminance step exceeds the ceiling `content/scenes.json` declares. The first
+  time it ran it flagged the demo host's own iframe border, which was the check
+  working.
+- **`## Background` in every format doc** and in `templates/facet-format.md`,
+  because a facet with no answer for where it stands is how text ends up on a
+  busy patch.
+
 ### Fixed
 
 - **Event choices applied nothing.** The client rendered every consequence in

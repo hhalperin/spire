@@ -19,7 +19,7 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
@@ -132,6 +132,95 @@ async function expect(page, label, checks) {
   }
 }
 
+/* ----------------------------------------------------------------- scenes -- */
+
+const SCENES = JSON.parse(readFileSync(join(ROOT, 'content', 'scenes.json'), 'utf8'));
+const CEILING = SCENES.contrast.legibility_ceiling;
+
+/* Measure the composed background where text lives, on real pixels.
+ *
+ * The composer keeps backgrounds legible by bounding how far each layer may step
+ * from the void and attenuating that step behind a safe rectangle. This is the
+ * check that the bound survives contact with a browser — blend modes, gradients,
+ * theme inversion and all — rather than only holding in the arithmetic.
+ *
+ * What it measures is the *local* step: the largest luminance jump between
+ * neighbouring samples on an 8px grid inside each safe rectangle. Local is the
+ * right scale, because text contrast is local. A slow wash across the whole
+ * frame does not hurt a paragraph; a silhouette edge running under one does.
+ *
+ * The browser does the PNG decoding — a blank page with an <img> and a canvas —
+ * so this needs no image library and no new dependency.
+ */
+async function sceneContrast(page, label) {
+  const shell = view(page).locator('.shell');
+  await shell.evaluate((node) => { node.style.visibility = 'hidden'; });
+  /* Photograph #scene itself rather than the iframe element, and trim the rim
+     below. The demo host draws the view inside a rounded 1px border; on the
+     paper theme that dark edge against a light page is a 0.67 step, which is
+     what this check reported the first time it ran. It was right about the
+     pixels and wrong about whose they were. */
+  const png = await view(page).locator('#scene').screenshot({ type: 'png' });
+  await shell.evaluate((node) => { node.style.visibility = ''; });
+
+  const scene = await inside(page, () => document.querySelector('#scene').dataset.scene);
+  const safe = (SCENES.scenes[scene]?.safe) || [];
+  if (!safe.length) return;
+
+  const probe = await browser.newPage();
+  const worst = await probe.evaluate(async ({ data, rects }) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${data}`;
+    await img.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const { data: px, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    // Rec. 709 luma is close enough here and is what "how light is this" means
+    // to an eye; the check is about steps, not about absolute appearance.
+    const lum = (x, y) => {
+      const i = (y * width + x) * 4;
+      return (0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]) / 255;
+    };
+
+    // An element capture lands on whole pixels while the element itself sits on
+    // a half one, so the outermost rows can be the host's frame rather than the
+    // scene. Trim the rim: a capture boundary is not a background.
+    const RIM = 3;
+    let step = 0;
+    let where = null;
+    rects.forEach((r, n) => {
+      const x0 = Math.max(RIM, Math.round(r.x * width));
+      const y0 = Math.max(RIM, Math.round(r.y * height));
+      const x1 = Math.min(width - RIM, Math.round((r.x + r.w) * width));
+      const y1 = Math.min(height - RIM, Math.round((r.y + r.h) * height));
+      for (let y = y0; y < y1; y += 8) {
+        for (let x = x0; x < x1; x += 8) {
+          const here = lum(x, y);
+          const jump = Math.max(
+            Math.abs(here - lum(Math.min(x1, x + 8), y)),
+            Math.abs(here - lum(x, Math.min(y1, y + 8))),
+          );
+          if (jump > step) { step = jump; where = `safe[${n}] at ${x},${y}`; }
+        }
+      }
+    });
+    return { step, where };
+  }, { data: png.toString('base64'), rects: safe });
+  await probe.close();
+
+  process.stderr.write(`  · ${label}: ${scene}, worst step ${worst.step.toFixed(3)}`
+    + ` (ceiling ${CEILING})\n`);
+  if (worst.step > CEILING) {
+    failures.push(
+      `${label}: background steps ${worst.step.toFixed(3)} behind text in ${scene}`
+      + ` — over the ${CEILING} legibility ceiling, ${worst.where}`,
+    );
+  }
+}
+
 /* ---------------------------------------------------------------- the run -- */
 
 /* Seed 2's Act I offers a shop on floor 2 and a campfire six floors up on one
@@ -164,8 +253,16 @@ async function walk(page, theme) {
     legend: '.map-legend',
     'draw tool': '.marker-bar .marker',
     'deck count in chrome': '#chrome',
+    'composed background': '#scene .scene-svg',
   });
   await shoot(page, tag('map'));
+  await sceneContrast(page, tag('map'));
+
+  // The background alone, with the content hidden — the receipt that the scene
+  // is a place and not a texture.
+  await view(page).locator('.shell').evaluate((n) => { n.style.visibility = 'hidden'; });
+  await shoot(page, tag('scene-map'));
+  await view(page).locator('.shell').evaluate((n) => { n.style.visibility = ''; });
 
   // The Slay the Spire 2 annotation layer.
   await view(page).locator('.marker').first().click();
@@ -207,8 +304,11 @@ async function walk(page, theme) {
     'energy pips': '.pips .pip',
     'keyboard hints': '.status .kbd',
     'active-room banner': '#banner',
+    'composed background': '#scene .scene-svg',
   });
   await shoot(page, tag('combat'));
+  // The densest screen in the product, and so the one legibility has to hold on.
+  await sceneContrast(page, tag('combat'));
 
   // Play by keyboard — one screen, everything reachable without a mouse.
   await page.keyboard.press('1');

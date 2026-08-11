@@ -787,3 +787,35 @@ def test_a_relic_taken_from_a_chest_survives_the_save(repo):
     runner.save()
     assert call(repo, "reward", "--take", "t")["ok"] is True
     assert "small-diffs" in deck.load(repo)["relics"]
+
+
+# --------------------------------------------------------------------------- #
+# scene rolls
+# --------------------------------------------------------------------------- #
+
+def test_the_map_ships_a_roll_vector_for_every_scene(repo):
+    """The client has no RNG, so the engine has to hand it every scene's dice.
+
+    Missing one is not a crash — the composer falls back to its midpoints and the
+    scene silently loses its variation, which is exactly the sort of failure that
+    survives a demo.
+    """
+    rolls = call(repo, "map")["map"]["scene_rolls"]
+    declared = {name for name in run.content("scenes")["scenes"] if not name.startswith("_")}
+    assert set(rolls) == declared
+    assert {len(v) for v in rolls.values()} == {mapgen.SCENE_ROLLS}
+    assert all(0.0 <= value <= 1.0 for vector in rolls.values() for value in vector)
+
+
+def test_scene_rolls_are_stable_for_a_seed_and_an_act(repo):
+    """Re-entering a floor has to look identical, not merely similar."""
+    first = call(repo, "map")["map"]["scene_rolls"]
+    enter_first_room(repo)
+    assert call(repo, "map")["map"]["scene_rolls"] == first
+
+
+def test_each_act_composes_a_different_place(repo):
+    """Same scene, different act — the seeding must actually separate them."""
+    seed = run.Run(repo).seed
+    vectors = [tuple(mapgen.scene_rolls(seed, act, "chamber")) for act in range(1, 6)]
+    assert len(set(vectors)) == len(vectors)

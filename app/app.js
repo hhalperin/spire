@@ -13,6 +13,9 @@
  */
 
 import { Bridge, unwrap } from './bridge.js';
+import {
+  loadScenes, composeScene, mountScene, applyAtmosphere, sceneFor, biomeForAct,
+} from './scene.js';
 
 const SOFT_CAP_WARN = 'Deck is at the soft cap — taking a card means trading one away.';
 
@@ -56,6 +59,13 @@ const FACETS = {
    converged on roughly this set. */
 const MARKERS = ['★', '✕', '☠', '❓', '👁'];
 
+/* content/scenes.json, inlined by tools/build-app.mjs. Reading it through a
+   guard rather than importing it means loading app/ unbundled — which nothing
+   ships, but which is how you would poke at one file — leaves the background
+   empty instead of throwing. */
+const SCENE_DATA = typeof SPIRE_SCENES === 'undefined' ? null : SPIRE_SCENES;
+if (SCENE_DATA) loadScenes(SCENE_DATA);
+
 const bridge = new Bridge({ name: 'Spire', version: '0.3.0' });
 
 const ui = {
@@ -96,8 +106,38 @@ function fanfare(text) {
   setTimeout(() => overlay.remove(), 660);
 }
 
-function setFacet(name) {
+/* Facet tint and background are one gesture, because they answer one question:
+   where am I. Splitting them let the tint change while the room stayed the same
+   picture, which read as a filter rather than a move. */
+function setScene(name) {
   document.documentElement.style.setProperty('--facet', `var(--facet-${FACETS[name] || 'map'})`);
+  paintScene(name);
+}
+
+/* Compose the background for a screen.
+ *
+ * The dice come from the engine — `map.scene_rolls`, one vector per scene, fixed
+ * for a seed and an act — so re-entering a floor is not merely similar to last
+ * time, it is the same picture. Before a run exists there are no dice at all and
+ * the composer falls back to its midpoints, which is the right answer for the
+ * title screen: a symmetric gate, drawn the same for everyone. */
+function paintScene(screen) {
+  const host = $('#scene');
+  if (!host || !SCENE_DATA) return;
+
+  const { scene, modifier } = sceneFor(screen, ui.state && ui.state.room);
+  const act = (ui.state && ui.state.act) || (ui.map && ui.map.act) || 1;
+  const biome = biomeForAct(act);
+  const rolls = (ui.map && ui.map.scene_rolls && ui.map.scene_rolls[scene]) || null;
+
+  // Recomposing costs a few hundred path builds, and render() fires on every
+  // card played. Redraw only when the place actually changed.
+  const key = `${scene}|${biome}|${modifier || ''}|${rolls ? rolls.length : 0}`;
+  if (host.dataset.key === key) return;
+  host.dataset.key = key;
+
+  applyAtmosphere(host, { scene, biome, modifier });
+  mountScene(host, composeScene({ scene, biome, modifier, rolls }));
 }
 
 /* ---------------------------------------------------------------- engine -- */
@@ -830,7 +870,7 @@ const SCREENS = {
 };
 
 function render() {
-  setFacet(ui.screen);
+  setScene(ui.screen);
   renderChrome();
   const stage = $('#stage');
   stage.innerHTML = '';

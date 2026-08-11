@@ -96,6 +96,36 @@ def elite_multiplier(act: int, ascension: int) -> float:
     return mult
 
 
+# The background composer's roll budget. content/scenes.json states the same
+# number and tests/test_scenes.py holds the two together, because a client that
+# expects more rolls than the engine ships would silently compose half a scene.
+SCENE_ROLLS = 96
+
+
+def scene_seed(seed: int, act: int, scene: str) -> int:
+    """Derive the per-scene seed.
+
+    Hashed, for exactly the reason `act_seed` is hashed: adding a scene offset
+    would let `(seed, act, scene_a)` collide with `(seed, act + k, scene_b)` and
+    two different places would quietly compose the same picture. A scene name is
+    a string anyway, so there is nothing to add.
+    """
+    digest = hashlib.sha256(f"scene:{seed}:{act}:{scene}".encode()).digest()
+    return int.from_bytes(digest[:8], "big")
+
+
+def scene_rolls(seed: int, act: int, scene: str, count: int = SCENE_ROLLS) -> list[float]:
+    """The float vector the background composer walks.
+
+    Same contract as `unknown_rolls`: the client has no RNG, so the engine
+    pre-rolls a fixed-length vector and the client applies the grammar in
+    content/scenes.json to it. Fixed length matters — a variable-length vector
+    would make the composer's fixed-slice cursor meaningless.
+    """
+    rng = random.Random(scene_seed(seed, act, scene))
+    return [rng.random() for _ in range(count)]
+
+
 def floor_rng(seed: int, floor: int) -> random.Random:
     """Per-floor isolated RNG.
 
@@ -828,6 +858,18 @@ def render(spire_map: SpireMap) -> str:
     return "\n".join(lines)
 
 
+def _cmd_scene_rolls(args: argparse.Namespace) -> int:
+    """Print one scene's roll vector. Used by tools/scenes.mjs so the gallery
+    composes from exactly the numbers the engine would ship, not lookalikes."""
+    print(json.dumps({
+        "seed": args.seed,
+        "act": args.act,
+        "scene": args.scene,
+        "rolls": scene_rolls(args.seed, args.act, args.scene),
+    }))
+    return 0
+
+
 def _cmd_show(args: argparse.Namespace) -> int:
     spire_map = generate(args.seed, args.act, ascension=args.ascension)
     if args.json:
@@ -893,6 +935,12 @@ def main(argv: list[str] | None = None) -> int:
     emit.add_argument("--acts", type=int, default=EMIT_ACTS)
     emit.add_argument("--ascension", type=int, default=0)
     emit.set_defaults(func=_cmd_emit_js)
+
+    rolls = sub.add_parser("scene-rolls", help="the roll vector for one scene")
+    rolls.add_argument("--seed", type=int, default=0)
+    rolls.add_argument("--act", type=int, default=1)
+    rolls.add_argument("--scene", required=True)
+    rolls.set_defaults(func=_cmd_scene_rolls)
 
     verify = sub.add_parser("verify", help="check invariants across many seeds")
     verify.add_argument("--seeds", type=int, default=200)
