@@ -82,11 +82,42 @@ def test_runs_public_roster_is_not_stale():
     for name in run.__all__:
         assert hasattr(run, name), f"run.__all__ names {name}, which does not exist"
 
-    defined_here = public_names("run") - {"HANDLERS"}
-    for name in defined_here:
+    for name in public_names("run"):
         if name.startswith("cmd_") or name == "require_room":
             continue  # dispatch internals, not the front door
         assert name in run.__all__, f"run.py defines {name} but __all__ does not list it"
+
+
+def test_every_flag_a_handler_reads_is_one_its_verb_declares():
+    """`args.<flag>` in a handler must be a flag that verb's row declares.
+
+    `VERBS` is now the only declaration of the CLI, which makes this checkable:
+    read each handler for the attributes it pulls off `args`, and hold them
+    against the flags its own row adds to the parser. A handler reaching for a
+    flag nobody declared raises AttributeError, and `dispatch` reports that as
+    `internal` — the one error shape mcp-client.md says the client must never
+    see, arriving only for the player who happened to take that branch.
+
+    Both sides are read from the source, so adding a verb cannot leave this
+    behind.
+    """
+    handlers = {node.name: node for node in tree("run").body
+                if isinstance(node, ast.FunctionDef) and node.name.startswith("cmd_")}
+    # argparse turns `--no-notes` into `args.no_notes`; `--path` and the
+    # subcommand itself are on the top-level parser, so every verb has them.
+    always = {"path", "command"}
+
+    for verb, (handler, _help, flags) in run.VERBS.items():
+        declared = always | {f.lstrip("-").replace("-", "_") for f, _opts in flags}
+        node = handlers[handler.__name__]
+        read = {n.attr for n in ast.walk(node)
+                if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name)
+                and n.value.id == "args"}
+        missing = read - declared
+        assert not missing, (
+            f"{handler.__name__} reads args.{', args.'.join(sorted(missing))} "
+            f"but the {verb!r} row in VERBS declares no such flag"
+        )
 
 
 def test_the_run_loop_never_imports_run():
@@ -101,6 +132,39 @@ def test_the_run_loop_never_imports_run():
             f"scripts/{module}.py imports run.py — the run loop's siblings must not "
             "depend on the entry point"
         )
+
+
+"""Modules whose import cost the run loop deliberately does not pay.
+
+Not a style rule — a latency one. `server/src/engine.rs` spawns a fresh
+`python3 scripts/run.py <verb>` for *every* tool call, so import cost is paid
+per click rather than once per session, and it is ~80% of what a click costs.
+
+  * `dataclasses` imports `inspect` (~10ms together) and bought two class
+    definitions; `Node` is a NamedTuple and `SpireMap` a plain class instead.
+  * `subprocess` (~4ms) is needed by one branch of one verb, so `acceptance.py`
+    imports it where it is used rather than at module scope.
+
+Each entry is here because it was measured and removed. Anything that puts one
+back should have to say why.
+"""
+UNIMPORTED = ["dataclasses", "inspect", "subprocess"]
+
+
+def test_the_run_loop_does_not_import_what_it_measured_and_dropped():
+    probe = (
+        f"import sys; sys.path.insert(0, {str(SCRIPTS)!r}); import run; "
+        f"print(','.join(m for m in {UNIMPORTED!r} if m in sys.modules))"
+    )
+    proc = subprocess.run([sys.executable, "-c", probe], cwd=SCRIPTS.parent,
+                          capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    back = [m for m in proc.stdout.strip().split(",") if m]
+    assert not back, (
+        f"importing run.py now pulls {', '.join(back)} — see the note above. "
+        "Each of these was measured out of the per-click path; putting one back "
+        "costs every tool call, not just the one that needed it."
+    )
 
 
 def test_every_module_imports_on_its_own():

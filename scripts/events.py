@@ -37,6 +37,127 @@ def choice_is_available(run: Run, choice: dict) -> str | None:
     return None
 
 
+# --------------------------------------------------------------------------- #
+# effect verbs
+# --------------------------------------------------------------------------- #
+#
+# One function per verb, each returning the line the player is shown — or None
+# where nothing happened, because "you already carry that relic" should not
+# announce a gift that was not given.
+#
+# These were an eighty-line if/elif chain, which made the set of implemented
+# verbs something only a reader could enumerate. `tests/test_run.py` therefore
+# checked content against a *hand-written* roster of ten, and so would have
+# stayed green if a verb here were renamed while content still used the old
+# name — the engine silently doing nothing while the event text said otherwise.
+# EFFECTS below is that roster, and the test now reads it from here.
+
+
+def _add_curse(run: Run, effect: dict) -> str | None:
+    curse = object_by_id("curses", effect.get("id", ""))
+    if curse and curse["id"] not in (run.game.get("curses") or []):
+        run.game.setdefault("curses", []).append(curse["id"])
+        return f"Gained the {curse['name']} curse. {curse['cost']}"
+    return None
+
+
+def _remove_curse(run: Run, effect: dict) -> str | None:
+    carried = run.game.get("curses") or []
+    target = effect.get("id")
+    drop = carried[0] if target == "any" and carried else (
+        target if target in carried else None)
+    if not drop:
+        return None
+    carried.remove(drop)
+    removed = object_by_id("curses", drop)
+    return f"Shed the {removed['name'] if removed else drop} curse."
+
+
+def _gain_relic(run: Run, effect: dict) -> str | None:
+    relic = object_by_id("relics", effect.get("id", ""))
+    if relic and relic["id"] not in (run.deck.get("relics") or []):
+        run.deck.setdefault("relics", []).append(relic["id"])
+        return f"Gained the {relic['name']} relic."
+    return None
+
+
+def _gain_card(run: Run, effect: dict) -> str | None:
+    pool = run.game.setdefault("hand_pool", run.owned_card_ids())
+    rarity = effect.get("rarity")
+    rng = mapgen.floor_rng(mapgen.act_seed(run.seed, run.act) + 4,
+                           int(run.deck.get("floor", 0)))
+    options = [c for c in content("cards")["cards"]
+               if c["id"] not in pool and (not rarity or c["rarity"] == rarity)]
+    # Rewards, the shop and trades all refuse past the cap; an event that
+    # quietly pushed you over was the last way around it. There is nobody to
+    # prompt for a trade mid-effect, so the gift is declined and said so rather
+    # than silently dropped.
+    if len(pool) >= SOFT_CAP:
+        return f"No room for another card (deck is at {SOFT_CAP})."
+    if not options:
+        return None
+    pick = options[rng.randrange(len(options))]
+    pool.append(pick["id"])
+    return f"Gained {pick['title']}."
+
+
+def _lose_card(run: Run, effect: dict) -> str | None:
+    pool = run.game.setdefault("hand_pool", run.owned_card_ids())
+    if effect.get("id") in pool:
+        pool.remove(effect["id"])
+        return f"Lost {effect['id']}."
+    return None
+
+
+def _gain_focus(run: Run, effect: dict) -> str | None:
+    amount = int(effect.get("amount", 0))
+    run.game["focus"] = int(run.game.get("focus", 0)) + amount
+    return f"Gained ◈{amount} focus."
+
+
+def _spend_focus(run: Run, effect: dict) -> str | None:
+    amount = int(effect.get("amount", 0))
+    run.game["focus"] = max(0, int(run.game.get("focus", 0)) - amount)
+    return f"Spent ◈{amount} focus."
+
+
+def _require_card(run: Run, effect: dict) -> str | None:
+    # "Spent" has to mean spent. This only wrote the text, so a choice gated on
+    # owning a card could be taken again and again with the card still in hand
+    # — the one event verb whose message and effect disagreed.
+    card = card_by_id(effect.get("id", ""))
+    pool = run.game.setdefault("hand_pool", run.owned_card_ids())
+    if effect.get("id") in pool:
+        pool.remove(effect["id"])
+    return f"Spent {card['title'] if card else effect.get('id')}."
+
+
+def _bump_prior(run: Run, effect: dict) -> str | None:
+    priors = run.game.setdefault("prior_bump", {})
+    room = effect.get("room", "")
+    delta = float(effect.get("delta", 0))
+    priors[room] = round(priors.get(room, 0.0) + delta, 4)
+    return f"{room.capitalize()} pressure {'rises' if delta > 0 else 'falls'} for the act."
+
+
+def _log_room(run: Run, effect: dict) -> str | None:
+    return "Logged and left."
+
+
+EFFECTS = {
+    "add_curse": _add_curse,
+    "remove_curse": _remove_curse,
+    "gain_relic": _gain_relic,
+    "gain_card": _gain_card,
+    "lose_card": _lose_card,
+    "gain_focus": _gain_focus,
+    "spend_focus": _spend_focus,
+    "require_card": _require_card,
+    "bump_prior": _bump_prior,
+    "log_room": _log_room,
+}
+
+
 def apply_effects(run: Run, effects: list[dict]) -> list[str]:
     """Apply one choice's effects and describe what happened, in order.
 
@@ -46,83 +167,10 @@ def apply_effects(run: Run, effects: list[dict]) -> list[str]:
     """
     log: list[str] = []
     for effect in effects or []:
-        verb = effect.get("verb")
-
-        if verb == "add_curse":
-            curse = object_by_id("curses", effect.get("id", ""))
-            if curse and curse["id"] not in (run.game.get("curses") or []):
-                run.game.setdefault("curses", []).append(curse["id"])
-                log.append(f"Gained the {curse['name']} curse. {curse['cost']}")
-
-        elif verb == "remove_curse":
-            carried = run.game.get("curses") or []
-            target = effect.get("id")
-            drop = carried[0] if target == "any" and carried else (
-                target if target in carried else None)
-            if drop:
-                carried.remove(drop)
-                removed = object_by_id("curses", drop)
-                log.append(f"Shed the {removed['name'] if removed else drop} curse.")
-
-        elif verb == "gain_relic":
-            relic = object_by_id("relics", effect.get("id", ""))
-            if relic and relic["id"] not in (run.deck.get("relics") or []):
-                run.deck.setdefault("relics", []).append(relic["id"])
-                log.append(f"Gained the {relic['name']} relic.")
-
-        elif verb == "gain_card":
-            pool = run.game.setdefault("hand_pool", run.owned_card_ids())
-            rarity = effect.get("rarity")
-            rng = mapgen.floor_rng(mapgen.act_seed(run.seed, run.act) + 4,
-                                   int(run.deck.get("floor", 0)))
-            options = [c for c in content("cards")["cards"]
-                       if c["id"] not in pool and (not rarity or c["rarity"] == rarity)]
-            # Rewards, the shop and trades all refuse past the cap; an event
-            # that quietly pushed you over was the last way around it. There is
-            # nobody to prompt for a trade mid-effect, so the gift is declined
-            # and said so rather than silently dropped.
-            if len(pool) >= SOFT_CAP:
-                log.append(f"No room for another card (deck is at {SOFT_CAP}).")
-            elif options:
-                pick = options[rng.randrange(len(options))]
-                pool.append(pick["id"])
-                log.append(f"Gained {pick['title']}.")
-
-        elif verb == "lose_card":
-            pool = run.game.setdefault("hand_pool", run.owned_card_ids())
-            if effect.get("id") in pool:
-                pool.remove(effect["id"])
-                log.append(f"Lost {effect['id']}.")
-
-        elif verb == "gain_focus":
-            amount = int(effect.get("amount", 0))
-            run.game["focus"] = int(run.game.get("focus", 0)) + amount
-            log.append(f"Gained ◈{amount} focus.")
-
-        elif verb == "spend_focus":
-            amount = int(effect.get("amount", 0))
-            run.game["focus"] = max(0, int(run.game.get("focus", 0)) - amount)
-            log.append(f"Spent ◈{amount} focus.")
-
-        elif verb == "require_card":
-            # "Spent" has to mean spent. This only wrote the text, so a choice
-            # gated on owning a card could be taken again and again with the
-            # card still in hand — the one event verb whose message and effect
-            # disagreed.
-            card = card_by_id(effect.get("id", ""))
-            pool = run.game.setdefault("hand_pool", run.owned_card_ids())
-            if effect.get("id") in pool:
-                pool.remove(effect["id"])
-            log.append(f"Spent {card['title'] if card else effect.get('id')}.")
-
-        elif verb == "bump_prior":
-            priors = run.game.setdefault("prior_bump", {})
-            room = effect.get("room", "")
-            priors[room] = round(priors.get(room, 0.0) + float(effect.get("delta", 0)), 4)
-            direction = "rises" if float(effect.get("delta", 0)) > 0 else "falls"
-            log.append(f"{room.capitalize()} pressure {direction} for the act.")
-
-        elif verb == "log_room":
-            log.append("Logged and left.")
-
+        handler = EFFECTS.get(effect.get("verb", ""))
+        if handler is None:
+            continue
+        said = handler(run, effect)
+        if said:
+            log.append(said)
     return log

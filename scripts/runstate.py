@@ -112,7 +112,7 @@ class Run:
         for node_id, outcome in (self.game.get("resolved") or {}).items():
             node = self._node_by_id(smap, node_id)
             if node is not None:
-                smap._unknown[node.key] = {"node": node_id, "resolve": outcome}
+                smap.remember(node, {"node": node_id, "resolve": outcome})
         return smap
 
     def ramp(self) -> mapgen.Ramp:

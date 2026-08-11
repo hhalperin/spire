@@ -20,6 +20,7 @@ import pathlib
 CONTENT_DIR = pathlib.Path(__file__).resolve().parent.parent / "content"
 
 _CONTENT_CACHE: dict[str, dict] = {}
+_INDEX_CACHE: dict[str, dict[str, dict]] = {}
 
 
 def content(name: str) -> dict:
@@ -30,15 +31,24 @@ def content(name: str) -> dict:
     return _CONTENT_CACHE[name]
 
 
+def _index(file: str, bucket: str) -> dict[str, dict]:
+    """One id→entry map per pool, built on first use.
+
+    Both lookups below used to scan their list. That reads fine for one call and
+    is wrong for the shape of the callers: `serialize_state` alone resolves the
+    pool three times over, so a twelve-card deck against a thirty-card pool spent
+    a few hundred comparisons answering questions a dict answers by construction.
+    Building the map once is also simply less code than the loop it replaces.
+    """
+    key = f"{file}.{bucket}"
+    if key not in _INDEX_CACHE:
+        _INDEX_CACHE[key] = {entry["id"]: entry for entry in content(file)[bucket]}
+    return _INDEX_CACHE[key]
+
+
 def card_by_id(card_id: str) -> dict | None:
-    for card in content("cards")["cards"]:
-        if card["id"] == card_id:
-            return card
-    return None
+    return _index("cards", "cards").get(card_id)
 
 
 def object_by_id(bucket: str, obj_id: str) -> dict | None:
-    for obj in content("objects")[bucket]:
-        if obj["id"] == obj_id:
-            return obj
-    return None
+    return _index("objects", bucket).get(obj_id)
