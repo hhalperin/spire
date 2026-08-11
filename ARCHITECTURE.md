@@ -248,6 +248,62 @@ player would want preserved or would expect to hand-edit:
   `/spire:shop` deals from it. `scripts/pack.py list` indexes packs without
   parsing YAML.
 
+## The game client
+
+Acts 1-3 gave the engine a save, a reward loop and an ascension ladder. What it
+never had was the *run*: a map, a room you enter, a hand you spend, a floor that
+ticks. That layer exists now, and it is split across three pieces.
+
+```
+ Claude Desktop / claude.ai / VS Code / Cursor        Claude Code (terminal)
+              │  renders ui://spire/app.html                    │  reads content[0].text
+              ▼                                                 ▼
+        ┌──────────────────────────────────────────────────────────┐
+        │  server/  —  spire-mcp (Rust, rmcp)                      │
+        │  protocol + presentation. Owns no game state.            │
+        └──────────────────────────────┬───────────────────────────┘
+                                       │ python3 scripts/run.py <verb> --json
+                                       ▼
+        ┌──────────────────────────────────────────────────────────┐
+        │  scripts/run.py  —  the run loop (stdlib)                 │
+        │  reads content/*.json, mutates .spire/deck.json via deck.py│
+        └──────────────────────────────────────────────────────────┘
+```
+
+**`scripts/mapgen.py`** generates the climb: a 15x7 grid walked by six paths,
+quota-bag room assignment, unknown-node resolution with per-outcome ramp
+counters, and per-floor RNG isolation via `seed + floor`. It is pure arithmetic
+over a seed, which is why `mapgen.py verify` can check hundreds of maps against
+the invariants in one command.
+
+**`scripts/run.py`** is the run loop — enter, play, acceptance, clear, flee,
+reward, campfire, shop, annotate. Every subcommand takes `--path` and prints
+JSON; failures come back as `{"ok": false, "error": {...}}` with exit 0, because
+the client must never brick on a bad verb. It owns the single-room lock, the
+energy budget, card legality and the reward roll. It carries no HP, no damage
+math and no fabricated intents — see `design/spire-ai/sts-fidelity.md` for why
+each of those is a refusal rather than an omission.
+
+**`server/`** is a Rust crate using the official `rmcp` SDK. It declares one
+MCP Apps resource, `ui://spire/app.html` with mimeType
+`text/html;profile=mcp-app`, and fifteen tools that each carry
+`_meta.ui.resourceUri` pointing at it. Every tool result carries the state three
+ways at once: a drawn terminal rendering in `content[0].text`, the machine
+payload in `structuredContent`, and the view reference in `_meta`. One call,
+both surfaces, no host detection — which matters because **Claude Code is not on
+the MCP Apps support matrix** and is the plugin's primary host.
+
+Tools split by visibility. `spire_play_card`, `spire_list_hand`,
+`spire_end_turn` and `spire_annotate_node` are `["app"]`-only: they fire on
+every click, and keeping them off the model's tool list is what stops the agent
+narrating each card play.
+
+**`app/`** is the client — one self-contained HTML document with the stylesheet,
+the script and three subset woff2 faces inlined as data URIs. That is what lets
+the resource declare an empty CSP allowlist: there is genuinely nothing to
+allow. `tools/build-app.mjs` bundles it; `server/build.rs` makes cargo rebuild
+when it changes.
+
 ## Status
 
 Acts 1–3 (the starter deck, the reward-loop engine, and the ascension ladder)

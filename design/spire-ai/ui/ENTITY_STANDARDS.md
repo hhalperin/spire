@@ -98,7 +98,8 @@ rule. Node shapes follow [formats/map.md](formats/map.md).
 | Rest | Rounded square | `▲` | Campfire warm | options available |
 | Shop | Hexagon | `◆` | Shop violet | currency held |
 | Treasure | Small square | `▮` | Gold | what it contains |
-| Unknown | Diamond | `?` | Muted until resolved | prior, once resolved the real glyph |
+| Event | Diamond, dashed border | `◇` | Event green | its choices and their costs |
+| Unknown | Diamond, solid border | `?` | Muted until resolved | prior, once resolved the real glyph |
 
 ### Room type palette
 
@@ -150,13 +151,17 @@ that has been filed wrong.
 8. **No object may be added without a pool id.** Content lives in `content/`
    and `packs/`, never inline in a script.
 
-   *Scope, stated plainly because this rule currently convicts our own demo.*
-   It binds the engine and anything that reads a real repository. The wireframe
-   under `demo/` still holds its cards, enemies and events inline in `demo.js`,
-   which violates the spirit of the rule. Bosses have moved to
-   `content/bosses.json`; the rest is outstanding debt, not an exemption on
-   principle. Extract the remaining pools before anything in `demo/` is treated
-   as more than a sketch.
+   *This debt is now paid.* The rule used to convict our own demo: `demo.js`
+   held its cards, enemies, events, wares and objects inline, and only bosses
+   had been extracted. All of it now lives in `content/` — `enemies.json`,
+   `cards.json`, `events.json`, `shop.json`, `objects.json` alongside the
+   original `bosses.json` — and is read by `scripts/run.py`, which is the single
+   implementation of the run loop. `tests/test_run.py` enforces the rule
+   mechanically: every shop ware, treasure entry, starter card and event effect
+   must resolve to a real pool id, or the suite fails.
+
+   The browser sketch under `design/spire-ai/ui/demo/` is retained as the low-fi
+   reference. The shipping client is `app/`.
 
 ## Metrics surfaces
 

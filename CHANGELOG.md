@@ -7,7 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — the game client (beta)
+
+- **`scripts/run.py`** — the headless run loop: enter a room, spend energy, play
+  a card, run acceptance, clear or flee, resolve a reward, smith or prune, buy,
+  annotate the map. Stdlib only, JSON in and out, and it fails open with a
+  structured error rather than a traceback. Enforces the single active room.
+  An event's choice *is* its clear — `spire_clear_or_flee` takes a `choice`, ten
+  effect verbs are implemented, and unmet gates refuse with a reason — and every
+  verb that can move you returns a fresh map alongside the state. Every reload
+  goes through one method that carries this module's fields across a `deck.py`
+  write, so a relic gained at an event cannot be discarded by the reload after.
+- **`server/`** — `spire-mcp`, an MCP server on the official Rust SDK (`rmcp`).
+  Serves `ui://spire/app.html` as an MCP Apps resource and fifteen tools, four of
+  them app-only so the agent does not narrate every card play. Every result
+  carries a drawn terminal rendering *and* structured content, so Claude Code —
+  which cannot render MCP Apps — plays the same game as Claude Desktop.
+- **`app/`** — the client. One self-contained HTML document: dark torchlit theme
+  by default with the original paper palette as the light theme, the Slay the
+  Spire 2 intent taxonomy bound to deterministic sensors, parchment card frames,
+  a vertical climb, map annotation, run badges, and full keyboard play. Fonts are
+  subset and inlined, so the resource declares an empty CSP allowlist. The climb
+  scrolls: `.map-canvas` gets `overflow-x: hidden` rather than the `overflow`
+  shorthand, which would have won and clipped it.
+- **`content/{enemies,cards,events,shop,objects}.json`** — the content pools,
+  lifted out of `demo.js`. This pays off the debt `ENTITY_STANDARDS.md` rule 8
+  had been recording against the project since it was written.
+- **`game` block in `deck.json`** — additive, validated only when present, so
+  saves dealt before the client existed keep loading unchanged.
+- **`tools/`** — `build-app.mjs` bundles the client, `build-fonts.py` subsets and
+  inlines the type, `host/` is a minimal MCP Apps host for looking at the client,
+  and `shoot.mjs` drives the shipping client through a whole run and photographs
+  every screen in dark, light, narrow, greyscale and reduced-motion — failing if
+  any screen does not render what its format doc promises.
+- **`design/spire-ai/sts-fidelity.md` Part 6** — the Slay the Spire 2 ledger,
+  one verdict per system.
+
+### Fixed
+
+- A resolved unknown node that became an event rendered the literal string
+  `undefined` on the demo map: `GLYPH` had no `event` key while `resolveUnknown`
+  defaulted to `"event"`.
+- The demo's "Refresh prior" button had no handler and silently did nothing.
+- `mapgen.py` rendered `M/E/R/$/T/?` while every other surface used
+  `✦/✸/▲/◆/▮/◇/☠`. One glyph vocabulary now, from ENTITY_STANDARDS.
+
 ### Changed
+- The design system's default flipped from paper to stone-and-ember; the paper
+  palette is now the light theme, with every recorded contrast decision intact.
+- The map climbs. It used to run left-to-right, which read as a flowchart.
 - Rebranded the plugin from `deck-builder` to `spire`; commands are now
   `/spire`, `/spire:map`, `/spire:campfire`, `/spire:shop`, and `/spire:ascend`.
 - Moved the run home to `.spire/` (`deck.json`, `state.json`,
