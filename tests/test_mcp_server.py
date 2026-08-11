@@ -135,8 +135,37 @@ def test_the_server_initializes_and_names_itself(tmp_path):
         assert result["serverInfo"]["name"] == "spire"
         assert "tools" in result["capabilities"]
         assert "resources" in result["capabilities"]
-        assert "one room at a time" not in result.get("instructions", "").lower() or True
         assert "spire_get_run" in result["instructions"]
+
+        # The extension block was never asserted here, only in the Rust unit
+        # test, so the live handshake was free to stop advertising the app.
+        extensions = result["capabilities"]["extensions"]
+        assert extensions["io.modelcontextprotocol/ui"]["mimeTypes"] == [APP_MIME]
+
+        # Note what is deliberately NOT asserted: `result["protocolVersion"]`.
+        # The SDK echoes back whatever version the client asked for when it
+        # recognises it, so that field agrees with us no matter what the server
+        # declares — it passed while `get_info` named 2025-11-25. The server's
+        # own choice is only observable as the fallback, below.
+    finally:
+        live.close()
+
+
+def test_the_declared_version_is_the_one_we_chose(tmp_path):
+    """What the server falls back to when it does not know what was asked.
+
+    This is the only place `get_info`'s `protocol_version` is visible on the
+    wire. Asserting the handshake's echoed value instead looks like the same
+    check and is worth nothing: it agrees with the client by construction.
+    """
+    live = Session(str(tmp_path))
+    try:
+        reply = live.request("initialize", {
+            "protocolVersion": "1999-01-01",
+            "capabilities": {},
+            "clientInfo": {"name": "from-the-future", "version": "0"},
+        })
+        assert reply["result"]["protocolVersion"] == PROTOCOL_VERSION
     finally:
         live.close()
 
@@ -355,3 +384,42 @@ def test_a_fight_room_can_be_cleared_without_the_app(plain_session):
     cleared = plain_session.payload("spire_clear_or_flee", {"action": "clear"})
     assert cleared["ok"] is True, cleared
     assert cleared["state"]["floor"] == 1
+
+
+def test_the_server_answers_discover_with_no_handshake_at_all(tmp_path):
+    """2026-07-28's stateless core: no `initialize`, no session, no state.
+
+    A client may open with `server/discover` and restate who it is in `_meta` on
+    every request. That is the whole point of the stateless revision — any
+    instance can answer any request — and it is the shape spire was already
+    built for, since the server holds no game state and re-reads its config per
+    call. Nothing exercised it, so nothing would have noticed it regressing.
+    """
+    live = Session(str(tmp_path))
+    try:
+        reply = live.request("server/discover", {"_meta": {
+            "io.modelcontextprotocol/protocolVersion": PROTOCOL_VERSION,
+            "io.modelcontextprotocol/clientCapabilities": {"extensions": {}},
+            "io.modelcontextprotocol/clientInfo": {"name": "stateless", "version": "0"},
+        }})
+        result = reply["result"]
+        assert PROTOCOL_VERSION in result["supportedVersions"]
+        assert result["capabilities"]["extensions"]["io.modelcontextprotocol/ui"]
+        assert "tools" in result["capabilities"]
+    finally:
+        live.close()
+
+
+def test_older_hosts_still_negotiate_down(tmp_path):
+    """Declaring 2026-07-28 is a ceiling, not a floor."""
+    for version in ("2025-11-25", "2025-06-18"):
+        live = Session(str(tmp_path))
+        try:
+            reply = live.request("initialize", {
+                "protocolVersion": version,
+                "capabilities": {},
+                "clientInfo": {"name": "old-host", "version": "0"},
+            })
+            assert reply["result"]["protocolVersion"] == version
+        finally:
+            live.close()

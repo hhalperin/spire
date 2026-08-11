@@ -8,7 +8,13 @@
 //!
 //! Unicode box drawing only — no ANSI escapes. A host that does not interpret
 //! escapes would print them as literal garbage, and this text is read by a model
-//! as often as by a person.
+//! as often as by a person. It also has to survive a *chat panel*: the VS Code
+//! extension renders tool output as markdown in a conversation, not a terminal,
+//! which is a second reason escapes are out and fixed-width glyphs are in.
+//!
+//! Every room draws its own choices. A rest, chest or shop room carries
+//! `options` / `offer` / `wares` rather than `intents`, and where there is no
+//! app this text *is* the screen, not a summary of it — see `choices`.
 //!
 //! Glyphs come from `design/spire-ai/ui/ENTITY_STANDARDS.md`. The silhouette
 //! carries the meaning so the surface survives having no colour at all, which is

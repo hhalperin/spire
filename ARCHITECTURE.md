@@ -346,10 +346,37 @@ payload in `structuredContent`, and the view reference in `_meta`. One call,
 both surfaces, no host detection — which matters because **Claude Code is not on
 the MCP Apps support matrix** and is the plugin's primary host.
 
-Tools split by visibility. `spire_play_card`, `spire_list_hand`,
-`spire_end_turn` and `spire_annotate_node` are `["app"]`-only: they fire on
-every click, and keeping them off the model's tool list is what stops the agent
-narrating each card play.
+### Two protocols, and which one a host gets
+
+The server declares `2026-07-28` by name — not `ProtocolVersion::default()`,
+which in rmcp 3.1.2 is still `2025-11-25`. Older hosts negotiate down; 2025-11-25
+and 2025-06-18 are both exercised.
+
+Under 2026-07-28 there is **no handshake to remember**. A client may open with
+`server/discover` and no `initialize`, restating its protocol version and
+capabilities in `_meta` on every request. That is what makes the protocol
+stateless, and spire was already built for it: `Spire` is a zero-sized struct,
+config is re-read per call, and every tool spawns a fresh Python process. The
+upgrade did not change the design — it let the design be spoken.
+
+### Tool visibility negotiates
+
+`spire_play_card`, `spire_list_hand`, `spire_end_turn` and `spire_annotate_node`
+are `["app"]`-only: they fire on every click, and keeping them off the model's
+tool list is what stops the agent narrating each card play.
+
+That is only right when the agent has a UI to click them in, and **Claude Code
+does not** — in the terminal or in the VS Code extension. Hiding them there left
+`tools/list` with no verb that adds progress, while `spire_clear_or_flee` refuses
+below `clear_at` and nothing exposes `force`: a monster, elite or boss room could
+be entered and then only fled, which is most of the map.
+
+So `list_tools` reads the client's declared extensions and offers all fifteen
+tools to anything that did not declare `io.modelcontextprotocol/ui`. This is the
+graceful degradation the extensions spec asks for — a UI-enhanced server still
+has to be useful to a client that cannot render the UI. Reading those extensions
+goes through `RequestContext::client_capabilities`, which knows not to consult
+the peer on a stateless connection, where there is no handshake to consult.
 
 **`app/`** is the client — one self-contained HTML document with the stylesheet,
 the script and three subset woff2 faces inlined as data URIs. That is what lets
