@@ -909,94 +909,121 @@ function composeScene({ scene, biome, modifier, rolls }) {
   const safe = (spec.safe || []).map(scaleRect);
   const deltas = Object.fromEntries(SCENES.layers.map((l) => [l.id, l.max_delta]));
 
-  const grammar = JSON.parse(JSON.stringify(spec.grammar));
-  if (mod && mod.extra) {
-    Object.entries(mod.extra).forEach(([layer, entries]) => {
-      grammar[layer] = (grammar[layer] || []).concat(entries);
-    });
-  }
   const suppressed = new Set((mod && mod.suppress) || []);
   const built = [];
 
-  SCENES.layers
-    .filter((layer) => layer.kind === 'silhouette' && spec.layers.includes(layer.id))
-    .forEach((layer) => {
-      const entries = grammar[layer.id] || [];
-      if (!entries.length) return;
+  const silhouettes = SCENES.layers.filter(
+    (layer) => layer.kind === 'silhouette' && spec.layers.includes(layer.id),
+  );
 
-      /* A suppressed layer still costs its dice.
-       *
-       * The engine sizes the roll vector from the *full* scene grammar
-       * (`mapgen.scene_budget`), because the budget is a property of the scene,
-       * not of whichever modifier happens to be applied. Returning early here
-       * skipped that layer's fixed slices, so the cursor arrived short and every
-       * layer after it read floats meant for something else — the reward scene
-       * uses `calm`, which suppresses `near`, so its background was drawn from
-       * misaligned dice on every seed.
-       *
-       * The whole point of the fixed-slice cursor is that one entry can never
-       * shift the dice of the next. A layer that draws nothing is just an entry
-       * that draws nothing; it reserves its budget and moves on. */
-      const drawing = !suppressed.has(layer.id);
+  /* Walk order: the whole base grammar first, layer by layer, then the
+   * modifier's extras.
+   *
+   * This has to match `mapgen.scene_budget`, which sums the base grammar and
+   * *appends* the worst modifier's extras. Splicing extras into their layer
+   * instead pushed every later layer's slices along, so the same node drawn as
+   * an elite read a different floor from the same node drawn plain — the two
+   * disagreed about which float meant what. Extras belong at the tail, which is
+   * exactly where the engine reserves room for them.
+   *
+   * Drawing order is unaffected: each path is appended to its own layer group,
+   * and `mountScene` does the stacking. Only the dice are ordered here. */
+  const walk = [];
+  silhouettes.forEach((layer) => {
+    (spec.grammar[layer.id] || []).forEach((entry) => walk.push({ layer, entry }));
+  });
+  const baseEntries = walk.length;
+  silhouettes.forEach((layer) => {
+    (((mod && mod.extra) || {})[layer.id] || []).forEach((entry) => walk.push({ layer, entry }));
+  });
 
-      // One SVG per layer, not one per scene. The stack interleaves — haze sits
-      // between far and mid, the light shaft between mid and near — and CSS
-      // gradients cannot be siblings of SVG groups. mountScene() does the
-      // weaving; this only has to keep the layers separable.
-      const group = svgEl('svg', {
+  const groups = new Map();
+  // One SVG per layer, not one per scene. The stack interleaves — haze sits
+  // between far and mid, the light shaft between mid and near — and CSS
+  // gradients cannot be siblings of SVG groups. mountScene() does the weaving;
+  // this only has to keep the layers separable.
+  const groupFor = (layer) => {
+    if (!groups.has(layer.id)) {
+      groups.set(layer.id, svgEl('svg', {
         viewBox: `0 0 ${W} ${H}`,
         preserveAspectRatio: 'xMidYMid slice',
         'aria-hidden': 'true',
         focusable: 'false',
         class: `scene-svg scene-layer-${layer.id}`,
-      });
-      entries.forEach((entry) => {
-        // Fixed slice: reserve this entry's budget before drawing anything, so
-        // one entry can never shift the dice of the next. The cost comes from
-        // the component's own declaration, because only the builder knows how
-        // many floats it draws.
-        const cost = (SCENES.components[entry.component] || {}).rolls || 0;
-        const slice = 2 + cost * entry.count[1];
-        const mark = cursor.i + slice;
-        cursor.open(cursor.i, slice);
+      }));
+    }
+    return groups.get(layer.id);
+  };
 
-        const appears = cursor.take();
-        const [low, high] = entry.count;
-        const count = cursor.intBetween(low, high);
-        if (drawing && count > 0 && (entry.weight === undefined || appears <= entry.weight)) {
-          const zone = spec.zones[entry.zone] || SCENES.bands[entry.zone];
-          const box = scaleRect(zone);
-          const builder = COMPONENTS[entry.component];
-          for (let i = 0; i < count; i += 1) {
-            // Each instance gets its own slot across the zone, so repeats read as
-            // a colonnade rather than a pile.
-            const slot = count === 1 ? box : {
-              x: box.x + (box.w * i) / count,
-              y: box.y,
-              w: box.w / count,
-              h: box.h,
-            };
-            const scaled = mod && mod.scale
-              ? { ...slot, y: slot.y - slot.h * (mod.scale - 1) * 0.5, h: slot.h * mod.scale }
-              : slot;
-            const d = builder(scaled, cursor, biomeSpec);
-            if (!d) continue;
-            group.appendChild(svgEl('path', {
-              d,
-              'fill-rule': 'evenodd',
-              fill: fillFor(deltas[layer.id], behindTextFraction(scaled, safe)),
-            }));
-          }
-        }
-        cursor.advanceTo(mark);
-      });
-      if (group.childNodes.length) built.push({ id: layer.id, node: group });
-    });
+  let consumedBase = 0;
+  walk.forEach(({ layer, entry }, index) => {
+    if (index === baseEntries) consumedBase = cursor.i;
+    /* A suppressed layer still costs its dice.
+     *
+     * The engine sizes the vector from the full grammar, because the budget is
+     * a property of the scene and not of whichever modifier is applied. Skipping
+     * a suppressed layer's slices left the cursor short and every layer after it
+     * reading floats meant for something else — the reward scene uses `calm`,
+     * which suppresses `near`, so it drew misaligned on every seed. A layer that
+     * draws nothing is just an entry that draws nothing: it reserves its budget
+     * and moves on. */
+    const drawing = !suppressed.has(layer.id);
 
-  // `consumed` is how far the cursor walked. It exists so the invariant that a
-  // modifier changes what is *drawn* and never how much of the stream is
-  // *walked* can be checked (tools/scene-consumption.mjs) rather than assumed.
-  return { layers: built, spec, biome: biomeSpec, modifier: mod, consumed: cursor.i };
+    // Fixed slice: reserve this entry's budget before drawing anything, so one
+    // entry can never shift the dice of the next. The cost comes from the
+    // component's own declaration, because only the builder knows how many
+    // floats it draws.
+    const cost = (SCENES.components[entry.component] || {}).rolls || 0;
+    const slice = 2 + cost * entry.count[1];
+    const mark = cursor.i + slice;
+    cursor.open(cursor.i, slice);
+
+    const appears = cursor.take();
+    const [low, high] = entry.count;
+    const count = cursor.intBetween(low, high);
+    if (drawing && count > 0 && (entry.weight === undefined || appears <= entry.weight)) {
+      const zone = spec.zones[entry.zone] || SCENES.bands[entry.zone];
+      const box = scaleRect(zone);
+      const builder = COMPONENTS[entry.component];
+      const group = groupFor(layer);
+      for (let i = 0; i < count; i += 1) {
+        // Each instance gets its own slot across the zone, so repeats read as a
+        // colonnade rather than a pile.
+        const slot = count === 1 ? box : {
+          x: box.x + (box.w * i) / count,
+          y: box.y,
+          w: box.w / count,
+          h: box.h,
+        };
+        const scaled = mod && mod.scale
+          ? { ...slot, y: slot.y - slot.h * (mod.scale - 1) * 0.5, h: slot.h * mod.scale }
+          : slot;
+        const d = builder(scaled, cursor, biomeSpec);
+        if (!d) continue;
+        group.appendChild(svgEl('path', {
+          d,
+          'fill-rule': 'evenodd',
+          fill: fillFor(deltas[layer.id], behindTextFraction(scaled, safe)),
+        }));
+      }
+    }
+    cursor.advanceTo(mark);
+  });
+
+  silhouettes.forEach((layer) => {
+    const group = groups.get(layer.id);
+    if (group && group.childNodes.length) built.push({ id: layer.id, node: group });
+  });
+
+  if (baseEntries === walk.length) consumedBase = cursor.i;
+  // `consumed` is the whole walk; `consumedBase` is where the modifier's extras
+  // begin. Both are exported so tools/scene-consumption.mjs can check that the
+  // extras sit at the tail, exactly where `mapgen.scene_budget` reserves them —
+  // a length-only check passed while `elite` still spliced them mid-stream.
+  return {
+    layers: built, spec, biome: biomeSpec, modifier: mod,
+    consumed: cursor.i, consumedBase,
+  };
 }
 
 /* Weave the composed silhouette into a host that already holds the atmosphere
