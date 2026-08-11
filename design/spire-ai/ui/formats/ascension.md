@@ -46,3 +46,7 @@ Hero = **ladder**. Stark ink accent — seriousness, not hype.
 | Show effects before apply | Raise silently |
 | Keep A0 honest | Hide warn-only |
 | One ladder | Separate “modes” maze |
+
+## Background
+
+None of its own. Ascension is a setting, not a room; it renders over whatever scene the screen it was opened from declared. Nothing here should depend on what is behind it.

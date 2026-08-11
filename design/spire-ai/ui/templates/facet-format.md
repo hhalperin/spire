@@ -51,6 +51,25 @@ Examples of good / bad microcopy.
 
 Which schema fields populate which regions (link `content-schema.md`).
 
+## Background
+
+Every screen stands somewhere. Name the scene, or say plainly that this surface
+is an overlay and has none — an unanswered slot here is how a facet ships with
+text sitting on a busy patch.
+
+- **Scene** — the entry in `content/scenes.json` → `screens.<screen>`. Add one
+  there first; the JSON is the source of the background, not a description of it.
+- **Safe area** — the rectangle(s) content occupies, in normalised frame
+  coordinates. Silhouette crossing it is attenuated rather than clipped.
+- **Modifier** — if this screen is an existing place under different pressure
+  (elite, calm), use a modifier instead of declaring a new scene.
+- **Light** — where the one warm source sits, and how far it reaches.
+- **Layers** — which of the nine the scene uses.
+
+Then run `node tools/scenes.mjs` and look at it, and `node tools/shoot.mjs`,
+which samples real pixels inside every safe rectangle and fails if the
+background steps harder than the legibility ceiling behind your text.
+
 ## Wireframe
 
 `wireframes/<facet>.html`

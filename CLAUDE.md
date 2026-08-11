@@ -64,8 +64,11 @@ scripts/          scan.py, deck.py, ascend.py, paths.py, pack.py, mapgen.py,
 server/           spire-mcp — the Rust MCP server (rmcp). Protocol + terminal
                   rendering only; shells out to run.py for every rule
 app/              the MCP App client: index.html, app.css, app.js, bridge.js,
-                  fonts.css (generated). Bundled to server/assets/app.html
-tools/            build-app.mjs, build-fonts.py, shoot.mjs, host/ — dev only
+                  fonts.css (generated); scene.js + scene.css compose the
+                  backgrounds. Bundled to server/assets/app.html
+tools/            build-app.mjs, build-fonts.py, shoot.mjs, scenes.mjs,
+                  scene-consumption.mjs,
+                  host/ — dev only
 classes/          archetypes as YAML + detection.json (stdlib-loaded markers)
 content/          run content as JSON — bosses, enemies, cards, events, shop,
                   objects. Loaded by mapgen.py and run.py; never inline in code

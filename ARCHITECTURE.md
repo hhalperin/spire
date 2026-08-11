@@ -304,6 +304,29 @@ the resource declare an empty CSP allowlist: there is genuinely nothing to
 allow. `tools/build-app.mjs` bundles it; `server/build.rs` makes cargo rebuild
 when it changes.
 
+### Backgrounds
+
+The same constraint shapes the art. With no external origin available there can
+be no image assets, so every background is generated at runtime as inline SVG
+and CSS gradients — which is why the system is a grammar rather than an asset
+pipeline. `content/scenes.json` declares each place as layers, zones, safe areas
+and a component grammar; `app/scene.js` composes it; `tools/scenes.mjs` renders
+the labelled wireframe *from the same object*, so the spec cannot drift from the
+art.
+
+The client has no RNG here either. Following `mapgen.unknown_rolls`, the engine
+pre-rolls a fixed float vector per scene — `run.py`'s `scene_table`, seeded from
+the run seed and the act — and ships it on the map payload, which is the payload
+whose lifetime matches. Re-entering a floor is not similar to last time; it is
+the same picture.
+
+Legibility is bought with contrast, not geometry: the content column covers most
+of the frame, so there is nowhere to draw around the text. Each layer declares
+how far it may step from the void, and a shape crossing a safe rectangle has that
+step attenuated. `tools/shoot.mjs` samples real pixels inside every safe
+rectangle and fails the run if the background steps harder than the declared
+ceiling.
+
 ## Status
 
 Acts 1–3 (the starter deck, the reward-loop engine, and the ascension ladder)

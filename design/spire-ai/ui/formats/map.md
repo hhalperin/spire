@@ -57,3 +57,14 @@ Hero = **graph**. Detail rail is supporting, never taller than the graph on desk
 | One path hero | Dashboard of tickets |
 | Shape + label nodes | Color-only legend |
 | Bias hints on `?` | Autopick next node |
+
+## Background
+
+Scene **`shaft`** — `content/scenes.json` → `screens.map`. Inside the climb, looking up the well. The map screen is literally the thing this scene depicts, so the art stays at the walls and lets the graph own the middle.
+
+- **Safe area** — `x 0.08 → 0.92`, `y 0 → 0.82` in normalised frame coordinates. Silhouette crossing it is attenuated toward the void rather than clipped, because a screen this text-dense has nowhere to draw *around* the content; the floor is 40% of the layer's step.
+- **Light** — one warm source at `0.5, 0`, spread 1.3.
+- **Layers** — void · far · haze · mid · shaft · near · floor · glow · vignette.
+- **Per act** — the biome supplies palette, arch style and pillar variants; the scene supplies structure, so the same grammar reads as a different world each act.
+
+Moving a region on this screen means re-checking that safe rectangle and re-running `node tools/scenes.mjs`. The wireframe is not a drawing of these backgrounds — it is their source.
