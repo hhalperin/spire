@@ -13,8 +13,18 @@ about a project is written *into that project*, never stored here. See
 
 ## Rules of the road
 
-- **Scripts are pure standard library.** `scripts/scan.py` and `scripts/deck.py`
-  import only the stdlib — no third-party runtime dependencies, no network.
+- **Scripts are pure standard library.** `scripts/scan.py`, `scripts/deck.py`,
+  `scripts/ascend.py`, `scripts/mapgen.py`, `scripts/run.py`, and everything
+  dealt into target repos (`record_play.py`, `ascension_gate.py`) must import
+  only the stdlib (no third-party runtime deps) so they run in any repo's
+  environment. **Two documented exceptions, and only two.** `scripts/curator.py`
+  has a *soft* dependency on `claude-agent-sdk`, because judgment inherently
+  needs a model, and it degrades to "skip" cleanly if it is absent. And
+  `server/` is a Rust crate — the MCP server is a protocol implementation, not a
+  script, and hand-rolling JSON-RPC to avoid `rmcp` would have been dogma rather
+  than discipline. The rule it still obeys: the server owns **no game state**.
+  Every rule lives in `run.py`; Rust does protocol and presentation only.
+
 - **Classes are data.** Archetypes live in `classes/*.yaml`; the scripts do not
   parse them (the `/spire` skill does). New archetypes and card packs are
   the intended contribution surface — markdown and YAML, not Python.

@@ -1,11 +1,14 @@
 # Slay the Spire fidelity ledger
 
-Status: living. Scope: Slay the Spire (2019), not Slay the Spire 2.
+Status: living. Scope: Slay the Spire (2019) in Parts 1-5; Slay the Spire 2
+(Early Access) in Part 6.
 
 This is the reference we port against. Part 1 and Part 2 document what the
 original game actually does. Part 3 ranks which properties are load-bearing.
 Part 4 is the ledger, one row per system, recording whether we emulate it,
-adapt it, or refuse it, and why. Part 5 names what gets built first.
+adapt it, or refuse it, and why. Part 5 names what gets built first. Part 6 does
+the same job for the sequel, which shipped after this document was first written
+and changed several things worth porting.
 
 The ledger is the point. A mechanics dump with no decision attached to it is
 trivia. Every row here has a verdict.
@@ -441,3 +444,73 @@ Concretely, in `scripts/mapgen.py`, stdlib only.
 
 Everything in that list is checkable by script over hundreds of seeds, which is
 what `mapgen.py verify` does.
+
+## Part 6. Slay the Spire 2
+
+Scope note: Early Access, patched continuously. Everything below is a property
+of the shipped sequel as of this writing, not of a datamine or a roadmap. The
+sequel matters here for one reason — it is Mega Crit revisiting their own
+interface with six years of telemetry, so where StS2 changed something, that is
+a designer with better evidence than ours disagreeing with StS1.
+
+The verdicts use the same vocabulary as Part 4: **Emulate**, **Adapt**,
+**Refuse**, **Defer**.
+
+### What actually changed in the interface
+
+**The intent vocabulary got wider and flatter.** StS1 shipped seventeen intent
+values. StS2 keeps the grammar and adds legibility: the attack glyph scales
+across five tiers of menace rather than one weapon, multi-hit reads as `3x4`,
+and — the change that matters most — **multiple intents render side by side
+rather than stacked**. A monster that will attack *and* buff shows you both, in
+one row, at once.
+
+The full set: attack (exact post-modifier number), defend, buff, debuff,
+status-card (grey card, purple border, count), affliction (grey card, orange
+border), heal, summon, death blow, cowardly, stunned, sleeping (with a counter),
+unknown.
+
+**The map got a draw tool.** You can annotate the map before committing to an
+edge: mark elites, rest sites, shops, or trace two candidate routes and compare
+their elite counts. Community mods extended it with sticker sets. This is the
+first officially-sanctioned admission that *route planning is a distinct activity
+from route walking*, and that the map should support it.
+
+**Runs end with Badges.** Small end-of-run cards noting what was unique about
+that run. Mega Crit's framing: "little reminders to let you know what was unique
+about each run."
+
+**Rest sites grew to nine options** — Rest, Smith, Dig, Lift, Cook, Clone, Hatch,
+Mend, Kindle — most gated behind a relic or a card. Unavailable options are
+greyed rather than hidden.
+
+**Monsters got per-monster speech-bubble colours**, character and enemy
+animations were reworked, and the map paths were redrawn for legibility. Acts
+went from three-plus-one to three. Multiplayer for up to four players landed.
+
+### The ledger, part two
+
+| StS2 system | Verdict | Reasoning |
+| --- | --- | --- |
+| Intent icon taxonomy, thirteen kinds | **Emulate, bound to sensors** | Shipped. `content/enemies.json` declares the vocabulary and every intent carries a `sensor` naming the deterministic check behind it. An intent with no sensor is dropped before it reaches the client, and the client says so out loud rather than hedging |
+| Exact numbers on attacks, nothing on blocks | **Emulate** | Already Part 3's top finding. StS2 changing nothing here is the strongest confirmation available that the bracketed middle was the wrong answer |
+| Multiple intents side by side, not stacked | **Emulate** | Free legibility win. A room can telegraph two facts without either hiding the other |
+| Attack glyph scaled by tier | **Adapt** | Our tiers are sensor magnitudes, not damage. The glyph scales; the number under it is a count of failing checks, which is a real quantity |
+| Map annotation / draw tool | **Emulate** | The single most portable thing in the sequel. Routing a codebase is exactly the decision the map exists to support, and marking a node before committing to an edge is the same act. Shipped: `spire_annotate_node`, persisted in `game.annotations` |
+| Run badges | **Emulate** | Aimed at the gap Part 4 named as most in need of a payout. `content/objects.json` defines them as pure reads of the save — Ascetic counts skipped rewards, Lean Deck counts cards held, Cartographer counts annotations. Nothing is granted; every badge is earned or absent |
+| Nine rest-site options | **Adapt to three** | With no HP there is nothing to Rest, Mend or Cook. Smith and Prune remain, and Dig is kept as the relic-gated third because "an option you can see and cannot take yet" is the part of the nine that carries design weight. Options with no cost are not choices |
+| Greyed-out rather than hidden options | **Emulate** | Shipped at the campfire. Seeing the door you cannot open is information |
+| Per-monster speech-bubble colour | **Adapt** | Ours is the room-type palette, already scaled and already paired with a glyph and a label. A room says what kind of work it is by its colour *and* its chip |
+| Clearer map paths | **Emulate** | Acted on beyond the sequel's own change: our client now climbs bottom-to-top instead of running left-to-right. A spire is climbed. The horizontal graph was a wireframe convention that read as a flowchart |
+| Five characters, new resources (Stars, Forge, Doom) | **Refuse** | Character-specific resource systems need a combat layer we deliberately do not have. Our classes are repo archetypes, not movesets |
+| Orbs, Channel/Evoke/Focus | **Refuse** | Same reason. The Defect's name is borrowed; its mechanics are not |
+| 144 FPS, reworked animations | **Not applicable** | We are an HTML surface in a sandboxed iframe with a 2-3 beat motion budget. Juice must stay free, and free means cheap |
+| Four-player multiplayer | **Refuse** | `non-goals.md` already refuses it, and this does not amend that. One active room is the product |
+| Three acts instead of three-plus-one | **Refuse** | Our acts are unbounded on purpose (`sts-emulation-decisions.tsv`, row 26): a codebase does not finish, so a terminus would be the dishonest part |
+
+### What the sequel does not fix
+
+The pillar Part 4 marked **Open** — "a persistent depleting resource", the thing
+HP does in both games and nothing does here — is still open. StS2 keeps HP, so it
+offers no help. That remains the most important unfilled question in this design,
+and no amount of intent-icon fidelity substitutes for it.

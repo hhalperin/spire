@@ -174,7 +174,7 @@
     streak: 2, ascension: 10, ascPick: 10,
     currentEnemy: null, progress: 0, energy: 3, energyMax: 3, playedThisTurn: [],
     campMode: "prune", campPick: null, shopId: null,
-    rewardMode: "card",
+    rewardMode: "card", priorSeed: 0,
     theme: "light"
   };
 
@@ -285,6 +285,12 @@
   var $ = function (id) { return document.getElementById(id); };
   var els = {};
   var toastTimer = null;
+
+  var PRIORS = [
+    "Prior bias: bug 36% · feature 22% · refactor 16%",
+    "Prior bias: refactor 31% · bug 24% · docs 14%",
+    "Prior bias: infra 29% · feature 27% · design 11%"
+  ];
 
   function toast(msg) {
     els.toast.textContent = msg;
@@ -590,7 +596,9 @@
 
   var GLYPH = {
     monster: "✦", elite: "✸", rest: "▲", shop: "◆",
-    treasure: "▮", unknown: "?", boss: "☠"
+    // resolveUnknown() defaults to "event", so an event needs its own glyph or
+    // a resolved node renders the literal text "undefined".
+    treasure: "▮", event: "◇", unknown: "?", boss: "☠"
   };
 
   // The path runs left to right, floor 1 to boss, as formats/map.md specifies.
@@ -1107,6 +1115,10 @@
     }
 
     switch (action) {
+      case "refresh-prior":
+        toast(PRIORS[state.priorSeed % PRIORS.length]);
+        state.priorSeed += 1;
+        break;
       case "new-climb":
         var theme = state.theme;
         var seed = (state.seed + 1) % SEED_COUNT;
