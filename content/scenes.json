@@ -1,0 +1,414 @@
+{
+  "_comment": "Scene wireframes. This file is not documentation about the backgrounds — it IS the backgrounds: app/scene.js reads it at runtime and tools/scenes.mjs draws the labelled wireframe from the same data, so the spec cannot drift from the art. Coordinates are normalised 0..1 (x right, y down) so a scene is resolution-independent. Nothing here names a colour; biomes tint tokens that already flip with the theme, which is how the paper theme comes free.",
+
+  "version": 1,
+
+  "roll_budget": {
+    "_comment": "The client has no RNG. Following scripts/mapgen.py's `unknown_rolls`, the engine pre-rolls a float vector and the composer walks it in declared order. Every grammar entry consumes a FIXED slice — `2 + components[component].rolls * count_max`: an appear roll, a count roll, then each possible instance's worth — whether or not it uses all of it. Consuming a fixed slice is what stops one entry's dice from shifting every entry after it, and the composer will not read outside its slice even when a builder asks for more. There is deliberately no total here: the length a scene needs follows from its grammar and from `components.*.rolls`, so `mapgen.scene_budget` derives it rather than anyone maintaining a number that can silently disagree with what eighteen path builders actually draw. The first version of this file did maintain one, and shipped 96 floats to a scene that walked 170 — deterministic, so nothing looked broken, and quietly repeating itself.",
+    "per_entry_formula": "2 + components[component].rolls * count_max"
+  },
+
+  "contrast": {
+    "_comment": "The mechanism that makes this readable, and the one worth understanding. In a text-dense UI the content covers nearly the whole frame, so a background cannot be kept legible by drawing *around* the text — there is nowhere to draw. It is kept legible by bounding how loud it is allowed to be. Every silhouette layer declares `max_delta`, the furthest it may step away from the void in luminance; depth comes from the ordering of those steps, not from their size. Inside a safe rectangle the composer multiplies the step by `safe_attenuation`, so a shape passing behind a paragraph fades rather than being clipped. tools/shoot.mjs samples real pixels to check the result; these numbers are what the composer aims at.",
+    "safe_attenuation": 0.4,
+    "legibility_ceiling": 0.26
+  },
+
+  "layers": [
+    {"id": "void", "kind": "atmosphere", "z": 0, "max_delta": 0.0, "carries": "The depth of the shaft behind everything."},
+    {"id": "far", "kind": "silhouette", "z": 1, "max_delta": 0.07, "carries": "Distant crags, towers, the spire's own body."},
+    {"id": "haze", "kind": "atmosphere", "z": 2, "max_delta": 0.05, "carries": "The fog band that separates far from mid."},
+    {"id": "mid", "kind": "silhouette", "z": 3, "max_delta": 0.15, "carries": "The architecture you are standing in."},
+    {"id": "shaft", "kind": "atmosphere", "z": 4, "max_delta": 0.09, "carries": "Light from the one warm source."},
+    {"id": "near", "kind": "silhouette", "z": 5, "max_delta": 0.24, "carries": "Foreground framing: pillar edges, chains, roots."},
+    {"id": "floor", "kind": "silhouette", "z": 6, "max_delta": 0.19, "carries": "The ground plane the content sits on."},
+    {"id": "glow", "kind": "atmosphere", "z": 7, "max_delta": 0.12, "carries": "The torch pool. Absorbs the old body::before."},
+    {"id": "vignette", "kind": "atmosphere", "z": 8, "max_delta": 0.22, "carries": "The darkening frame."}
+  ],
+
+  "bands": {
+    "_comment": "Shared zone vocabulary. The content column is capped at 1080px and centred (app.css .shell), so on a wide viewport there is room either side and none in the middle. Silhouette therefore lives in a FRAME — crown, wings, base — and the middle is left to atmosphere, which cannot compete with text. At narrow widths the wings compress to nothing and the frame degrades to crown plus base, which is the correct graceful failure.",
+    "crown": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 0.16},
+    "wing_left": {"x": 0.0, "y": 0.05, "w": 0.17, "h": 0.9},
+    "wing_right": {"x": 0.83, "y": 0.05, "w": 0.17, "h": 0.9},
+    "base": {"x": 0.0, "y": 0.72, "w": 1.0, "h": 0.28},
+    "deep": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
+    "horizon": {"x": 0.0, "y": 0.34, "w": 1.0, "h": 0.30}
+  },
+
+  "components": {
+    "_comment": "The inventory. `layer` is the only layer an instance may be placed on; tests/test_scenes.py refuses a grammar entry that puts a component on the wrong one. `anchor` says which edge the shape grows from, which is what lets one path builder serve both wings and the crown. `rolls` is the worst case number of floats the builder draws for one instance — the number the slice formula multiplies. Only JavaScript can check it, so tools/scenes.mjs runs every builder at the extremes of every range and fails the build if one outdraws its declaration.",
+    "crag": {"layer": "far", "anchor": "bottom", "about": "A jagged ridge of rock.", "rolls": 14},
+    "tower": {"layer": "far", "anchor": "bottom", "about": "The spire's own body, seen from outside or across.", "rolls": 2},
+    "skyline": {"layer": "far", "anchor": "bottom", "about": "A low broken horizon of distant structure.", "rolls": 9},
+
+    "pillar": {"layer": "mid", "anchor": "bottom", "about": "A standing column. Variants: round, fluted, broken.", "rolls": 4},
+    "arch": {"layer": "mid", "anchor": "top", "about": "A span. Variants: round, pointed, broken.", "rolls": 4},
+    "window": {"layer": "mid", "anchor": "free", "about": "An opening. Variants: slit, barred, rose.", "rolls": 4},
+    "wall": {"layer": "mid", "anchor": "bottom", "about": "Coursed blockwork.", "rolls": 2},
+    "stair": {"layer": "mid", "anchor": "bottom", "about": "Ascending steps, read edge-on.", "rolls": 1},
+    "gate": {"layer": "mid", "anchor": "bottom", "about": "A closed way. The act's threshold.", "rolls": 1},
+    "brazier": {"layer": "mid", "anchor": "bottom", "about": "A standing fire bowl.", "rolls": 0},
+    "stall": {"layer": "mid", "anchor": "top", "about": "An awning over a merchant's nook.", "rolls": 2},
+    "chest": {"layer": "mid", "anchor": "bottom", "about": "A strapped box on a plinth.", "rolls": 0},
+
+    "pillar_edge": {"layer": "near", "anchor": "side", "about": "The near face of a column, cropped by the frame.", "rolls": 1},
+    "chain": {"layer": "near", "anchor": "top", "about": "A hanging line, sometimes with a hook.", "rolls": 2},
+    "banner": {"layer": "near", "anchor": "top", "about": "Cloth hung from above, torn at the hem.", "rolls": 3},
+    "root": {"layer": "near", "anchor": "side", "about": "Organic intrusion through the stone.", "rolls": 3},
+
+    "rubble": {"layer": "floor", "anchor": "bottom", "about": "Fallen stone scattered along the ground line.", "rolls": 19},
+    "step": {"layer": "floor", "anchor": "bottom", "about": "The lip of the floor plane.", "rolls": 1}
+  },
+
+  "biomes": {
+    "_comment": "One per act; acts past the Heart use `void`. A biome never names a colour — it names a tint token and a percentage, and scene.css mixes that into the stone ramp. Because the stone ramp already inverts for the paper theme, every biome works in both themes without a second definition.",
+    "understone": {
+      "act": 1,
+      "name": "The Understone",
+      "tint": "--steel",
+      "tint_pct": 10,
+      "arch": "round",
+      "pillar": ["round", "fluted"],
+      "flora": "moss",
+      "about": "Wet rock and round spans. The part of the spire that was built carefully."
+    },
+    "ironworks": {
+      "act": 2,
+      "name": "The Ironworks",
+      "tint": "--ember",
+      "tint_pct": 12,
+      "arch": "pointed",
+      "pillar": ["fluted", "broken"],
+      "flora": "none",
+      "about": "Girders and rust. Built fast, to be replaced, and never was."
+    },
+    "ember-vault": {
+      "act": 3,
+      "name": "The Ember Vault",
+      "tint": "--blood",
+      "tint_pct": 14,
+      "arch": "broken",
+      "pillar": ["broken", "round"],
+      "flora": "none",
+      "about": "Obsidian and heat cracks. Everything here has already failed once."
+    },
+    "heart": {
+      "act": 4,
+      "name": "The Heart",
+      "tint": "--violet",
+      "tint_pct": 16,
+      "arch": "round",
+      "pillar": ["round"],
+      "flora": "veins",
+      "about": "Organic. The architecture stopped being architecture."
+    },
+    "void": {
+      "act": 5,
+      "name": "The Endless",
+      "tint": "--muted",
+      "tint_pct": 6,
+      "arch": "broken",
+      "pillar": ["broken"],
+      "flora": "none",
+      "about": "Fractured and sparse. A codebase does not finish, so neither does this."
+    }
+  },
+
+  "screens": {
+    "_comment": "Which place each screen is standing in. A background answers `where am I`, which is not the same question as `which panel is showing` — reward happens in the room you just cleared, and intent and combat are one place at two beats.",
+    "title": {"scene": "gate"},
+    "map": {"scene": "shaft"},
+    "room": {"scene": "chamber"},
+    "room.elite": {"scene": "chamber", "modifier": "elite"},
+    "room.boss": {"scene": "sanctum"},
+    "event": {"scene": "crossroads"},
+    "reward": {"scene": "chamber", "modifier": "calm"},
+    "treasure": {"scene": "vault"},
+    "campfire": {"scene": "alcove"},
+    "shop": {"scene": "market"},
+    "deck": {"scene": "study"},
+    "badges": {"scene": "summit"}
+  },
+
+  "modifiers": {
+    "_comment": "A modifier adjusts an existing scene rather than declaring a new one, because an elite room and a monster room are the same place with different pressure.",
+    "elite": {"scale": 1.18, "light": 0.8, "extra": {"near": [{"component": "chain", "zone": "crown", "count": [2, 3]}]}},
+    "calm": {"scale": 1.0, "light": 1.25, "suppress": ["near"]}
+  },
+
+  "scenes": {
+    "gate": {
+      "about": "Outside, looking up. The only scene where you can see the whole spire, which is why the title screen is here.",
+      "layers": ["void", "far", "haze", "mid", "shaft", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.02, "spread": 1.15},
+      "zones": {
+        "ridge": {"x": 0.0, "y": 0.30, "w": 1.0, "h": 0.42},
+        "spire": {"x": 0.34, "y": 0.04, "w": 0.32, "h": 0.72},
+        "approach": {"x": 0.0, "y": 0.74, "w": 1.0, "h": 0.26}
+      },
+      "safe": [{"x": 0.0, "y": 0.0, "w": 1.0, "h": 0.72}],
+      "_safe_note": "Where text lives. Silhouette may cross it; the composer attenuates the layer's delta by contrast.safe_attenuation where it does.",
+      "grammar": {
+        "far": [
+          {"component": "tower", "zone": "spire", "count": [1, 1]},
+          {"component": "crag", "zone": "ridge", "count": [3, 5]}
+        ],
+        "mid": [
+          {"component": "gate", "zone": "approach", "count": [1, 1]}
+        ],
+        "floor": [
+          {"component": "step", "zone": "approach", "count": [1, 1]},
+          {"component": "rubble", "zone": "approach", "count": [2, 4]}
+        ]
+      }
+    },
+
+    "shaft": {
+      "about": "Inside the climb, looking up the well. The map screen is literally the thing this scene depicts, so the art stays at the walls and lets the graph own the middle.",
+      "layers": ["void", "far", "haze", "mid", "shaft", "near", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.0, "spread": 1.3},
+      "zones": {
+        "well": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 0.5},
+        "left_face": {"x": 0.0, "y": 0.08, "w": 0.17, "h": 0.88},
+        "right_face": {"x": 0.83, "y": 0.08, "w": 0.17, "h": 0.88},
+        "landing": {"x": 0.0, "y": 0.78, "w": 1.0, "h": 0.22}
+      },
+      "safe": [{"x": 0.08, "y": 0.0, "w": 0.84, "h": 0.82}],
+      "grammar": {
+        "far": [
+          {"component": "skyline", "zone": "well", "count": [1, 1]}
+        ],
+        "mid": [
+          {"component": "wall", "zone": "left_face", "count": [1, 1]},
+          {"component": "wall", "zone": "right_face", "count": [1, 1]},
+          {"component": "stair", "zone": "landing", "count": [1, 1]},
+          {"component": "window", "zone": "left_face", "count": [1, 3]},
+          {"component": "window", "zone": "right_face", "count": [1, 3]}
+        ],
+        "near": [
+          {"component": "pillar_edge", "zone": "left_face", "count": [1, 1]},
+          {"component": "pillar_edge", "zone": "right_face", "count": [1, 1]}
+        ],
+        "floor": [
+          {"component": "step", "zone": "landing", "count": [1, 1]}
+        ]
+      }
+    },
+
+    "chamber": {
+      "about": "A working room. The most-seen scene in the game, so it is also the most restrained: a colonnade in the wings, a floor line under the hand, nothing across the middle.",
+      "layers": ["void", "far", "haze", "mid", "shaft", "near", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.06, "spread": 1.0},
+      "zones": {
+        "backwall": {"x": 0.0, "y": 0.18, "w": 1.0, "h": 0.5},
+        "colonnade_left": {"x": 0.0, "y": 0.22, "w": 0.17, "h": 0.56},
+        "colonnade_right": {"x": 0.83, "y": 0.22, "w": 0.17, "h": 0.56},
+        "vault": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 0.16},
+        "ground": {"x": 0.0, "y": 0.74, "w": 1.0, "h": 0.26}
+      },
+      "safe": [{"x": 0.08, "y": 0.0, "w": 0.84, "h": 0.78}],
+      "grammar": {
+        "far": [
+          {"component": "crag", "zone": "backwall", "count": [2, 4]}
+        ],
+        "mid": [
+          {"component": "wall", "zone": "backwall", "count": [1, 1]},
+          {"component": "arch", "zone": "vault", "count": [1, 2]},
+          {"component": "pillar", "zone": "colonnade_left", "count": [1, 2]},
+          {"component": "pillar", "zone": "colonnade_right", "count": [1, 2]},
+          {"component": "window", "zone": "backwall", "count": [0, 2]}
+        ],
+        "near": [
+          {"component": "pillar_edge", "zone": "colonnade_left", "count": [0, 1]},
+          {"component": "pillar_edge", "zone": "colonnade_right", "count": [0, 1]}
+        ],
+        "floor": [
+          {"component": "step", "zone": "ground", "count": [1, 1]},
+          {"component": "rubble", "zone": "ground", "count": [1, 3]}
+        ]
+      }
+    },
+
+    "sanctum": {
+      "about": "The act's gate. Taller, symmetrical, and the only scene that puts anything above the content — the boss is the one thing allowed to loom.",
+      "layers": ["void", "far", "haze", "mid", "shaft", "near", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.1, "spread": 0.85},
+      "zones": {
+        "gateway": {"x": 0.3, "y": 0.0, "w": 0.4, "h": 0.34},
+        "flank_left": {"x": 0.0, "y": 0.1, "w": 0.2, "h": 0.72},
+        "flank_right": {"x": 0.8, "y": 0.1, "w": 0.2, "h": 0.72},
+        "dais": {"x": 0.0, "y": 0.76, "w": 1.0, "h": 0.24}
+      },
+      "safe": [{"x": 0.09, "y": 0.06, "w": 0.82, "h": 0.72}],
+      "grammar": {
+        "far": [
+          {"component": "tower", "zone": "gateway", "count": [1, 1]}
+        ],
+        "mid": [
+          {"component": "gate", "zone": "gateway", "count": [1, 1]},
+          {"component": "pillar", "zone": "flank_left", "count": [1, 2]},
+          {"component": "pillar", "zone": "flank_right", "count": [1, 2]}
+        ],
+        "near": [
+          {"component": "banner", "zone": "flank_left", "count": [0, 1]},
+          {"component": "banner", "zone": "flank_right", "count": [0, 1]},
+          {"component": "chain", "zone": "gateway", "count": [1, 2]}
+        ],
+        "floor": [
+          {"component": "step", "zone": "dais", "count": [1, 1]}
+        ]
+      }
+    },
+
+    "crossroads": {
+      "about": "A fork with no checkable way out. Two arches going different directions and no floor line committing to either — the ambiguity is the point, since an event is the one room with no honest intent.",
+      "layers": ["void", "far", "haze", "mid", "shaft", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.05, "spread": 1.05},
+      "zones": {
+        "left_way": {"x": 0.0, "y": 0.2, "w": 0.26, "h": 0.58},
+        "right_way": {"x": 0.74, "y": 0.2, "w": 0.26, "h": 0.58},
+        "far_wall": {"x": 0.2, "y": 0.28, "w": 0.6, "h": 0.36},
+        "ground": {"x": 0.0, "y": 0.76, "w": 1.0, "h": 0.24}
+      },
+      "safe": [{"x": 0.08, "y": 0.0, "w": 0.84, "h": 0.8}],
+      "grammar": {
+        "far": [
+          {"component": "skyline", "zone": "far_wall", "count": [1, 1]}
+        ],
+        "mid": [
+          {"component": "arch", "zone": "left_way", "count": [1, 1]},
+          {"component": "arch", "zone": "right_way", "count": [1, 1]},
+          {"component": "window", "zone": "far_wall", "count": [0, 1]}
+        ],
+        "floor": [
+          {"component": "rubble", "zone": "ground", "count": [1, 2]}
+        ]
+      }
+    },
+
+    "vault": {
+      "about": "A chest alcove. Small, close, and the only scene lit from below.",
+      "layers": ["void", "haze", "mid", "shaft", "near", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.72, "spread": 0.6},
+      "zones": {
+        "niche": {"x": 0.04, "y": 0.46, "w": 0.2, "h": 0.32},
+        "walls": {"x": 0.0, "y": 0.5, "w": 1.0, "h": 0.28},
+        "ground": {"x": 0.0, "y": 0.76, "w": 1.0, "h": 0.24}
+      },
+      "safe": [{"x": 0.08, "y": 0.0, "w": 0.84, "h": 0.74}],
+      "grammar": {
+        "mid": [
+          {"component": "wall", "zone": "walls", "count": [1, 1]},
+          {"component": "chest", "zone": "niche", "count": [1, 1]}
+        ],
+        "near": [
+          {"component": "chain", "zone": "walls", "count": [1, 2]}
+        ],
+        "floor": [
+          {"component": "step", "zone": "ground", "count": [1, 1]}
+        ]
+      }
+    },
+
+    "alcove": {
+      "about": "A rest cut into the wall. The one scene with its own light source in frame — the brazier, not the shaft — so the warm pool sits low and close.",
+      "layers": ["void", "haze", "mid", "shaft", "near", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.78, "spread": 0.7},
+      "zones": {
+        "hearth": {"x": 0.42, "y": 0.62, "w": 0.16, "h": 0.2},
+        "recess": {"x": 0.1, "y": 0.2, "w": 0.8, "h": 0.5},
+        "wing_left": {"x": 0.0, "y": 0.2, "w": 0.16, "h": 0.6},
+        "wing_right": {"x": 0.84, "y": 0.2, "w": 0.16, "h": 0.6},
+        "ground": {"x": 0.0, "y": 0.78, "w": 1.0, "h": 0.22}
+      },
+      "safe": [{"x": 0.08, "y": 0.0, "w": 0.84, "h": 0.76}],
+      "grammar": {
+        "mid": [
+          {"component": "arch", "zone": "recess", "count": [1, 1]},
+          {"component": "brazier", "zone": "hearth", "count": [1, 1]},
+          {"component": "pillar", "zone": "wing_left", "count": [0, 1]},
+          {"component": "pillar", "zone": "wing_right", "count": [0, 1]}
+        ],
+        "near": [
+          {"component": "root", "zone": "wing_left", "count": [0, 1]},
+          {"component": "root", "zone": "wing_right", "count": [0, 1]}
+        ],
+        "floor": [
+          {"component": "rubble", "zone": "ground", "count": [1, 3]}
+        ]
+      }
+    },
+
+    "market": {
+      "about": "A merchant's nook. Cloth and awning rather than stone, because the shop is the one place in the spire somebody chose to be.",
+      "layers": ["void", "haze", "mid", "shaft", "near", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.08, "spread": 0.95},
+      "zones": {
+        "awning": {"x": 0.08, "y": 0.0, "w": 0.84, "h": 0.18},
+        "backing": {"x": 0.1, "y": 0.2, "w": 0.8, "h": 0.5},
+        "wing_left": {"x": 0.0, "y": 0.16, "w": 0.16, "h": 0.64},
+        "wing_right": {"x": 0.84, "y": 0.16, "w": 0.16, "h": 0.64},
+        "ground": {"x": 0.0, "y": 0.78, "w": 1.0, "h": 0.22}
+      },
+      "safe": [{"x": 0.08, "y": 0.02, "w": 0.84, "h": 0.76}],
+      "grammar": {
+        "mid": [
+          {"component": "stall", "zone": "awning", "count": [1, 1]},
+          {"component": "wall", "zone": "backing", "count": [1, 1]},
+          {"component": "pillar", "zone": "wing_left", "count": [1, 1]},
+          {"component": "pillar", "zone": "wing_right", "count": [1, 1]}
+        ],
+        "near": [
+          {"component": "banner", "zone": "wing_left", "count": [1, 2]},
+          {"component": "banner", "zone": "wing_right", "count": [1, 2]}
+        ],
+        "floor": [
+          {"component": "step", "zone": "ground", "count": [1, 1]}
+        ]
+      }
+    },
+
+    "study": {
+      "about": "Not a place. The deck screen is a menu, so it gets the only scene with no architecture at all — atmosphere and a floor line, and nothing that pretends you walked somewhere.",
+      "layers": ["void", "haze", "shaft", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.0, "spread": 1.2},
+      "zones": {
+        "ground": {"x": 0.0, "y": 0.82, "w": 1.0, "h": 0.18}
+      },
+      "safe": [{"x": 0.0, "y": 0.0, "w": 1.0, "h": 0.84}],
+      "grammar": {
+        "floor": [
+          {"component": "step", "zone": "ground", "count": [1, 1]}
+        ]
+      }
+    },
+
+    "summit": {
+      "about": "Above the act you just cleared. The only scene that looks down instead of up, and the only one where the horizon sits low — you can see how far you came, which is what a badge is for.",
+      "layers": ["void", "far", "haze", "mid", "shaft", "floor", "glow", "vignette"],
+      "light": {"x": 0.5, "y": 0.12, "spread": 1.4},
+      "zones": {
+        "horizon": {"x": 0.0, "y": 0.52, "w": 1.0, "h": 0.3},
+        "ledge": {"x": 0.0, "y": 0.8, "w": 1.0, "h": 0.2},
+        "wing_left": {"x": 0.0, "y": 0.3, "w": 0.15, "h": 0.5},
+        "wing_right": {"x": 0.85, "y": 0.3, "w": 0.15, "h": 0.5}
+      },
+      "safe": [{"x": 0.08, "y": 0.0, "w": 0.84, "h": 0.8}],
+      "grammar": {
+        "far": [
+          {"component": "crag", "zone": "horizon", "count": [3, 6]},
+          {"component": "skyline", "zone": "horizon", "count": [1, 1]}
+        ],
+        "mid": [
+          {"component": "pillar", "zone": "wing_left", "count": [0, 1]},
+          {"component": "pillar", "zone": "wing_right", "count": [0, 1]}
+        ],
+        "floor": [
+          {"component": "step", "zone": "ledge", "count": [1, 1]},
+          {"component": "rubble", "zone": "ledge", "count": [1, 4]}
+        ]
+      }
+    }
+  }
+}
