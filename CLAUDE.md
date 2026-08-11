@@ -55,9 +55,19 @@ skills/           spire, map, campfire, shop, ascend (commands);
                   card-evaluation, deck-state (model-invoked rubrics)
 agents/           deck-curator.md — interactive campfire reviewer (haiku)
 hooks/            hooks.json — the engine's own PostToolUse/Stop/SessionStart
-scripts/          scan.py, deck.py, ascend.py, paths.py, pack.py, mapgen.py,
-                  run.py — stdlib only. run.py is the headless run loop the
-                  client drives; mapgen.py generates the climb
+scripts/          scan.py, deck.py, ascend.py, paths.py, pack.py, mapgen.py —
+                  stdlib only. mapgen.py generates the climb
+                  the run loop, seven flat siblings imported in this order:
+                    gamedata.py   content/*.json, loaded once, looked up by id
+                    runstate.py   RunError + Run — save, map, deck readings
+                    rooms.py      a room from a node, and the hand for it
+                    acceptance.py the deterministic sensor a room clears on
+                    events.py     event choices and what taking one does
+                    rewards.py    offers, chest draws, removal, badges
+                    serialize.py  the payloads the client renders
+                    run.py        the CLI, the dispatch table, the 15 verbs
+                  run.py re-exports every name it moved (see its `__all__`);
+                  nothing below it may import it back
                   curator.py — soft-dependency exception (claude-agent-sdk)
                   record_play.py, ascension_gate.py — dealt into target repos
                   under .spire/bin/, self-contained, no engine imports

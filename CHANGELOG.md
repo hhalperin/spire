@@ -84,6 +84,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `✦/✸/▲/◆/▮/◇/☠`. One glyph vocabulary now, from ENTITY_STANDARDS.
 
 ### Changed
+- **The run loop is seven modules instead of one 1562-line file.**
+  `scripts/run.py` keeps the CLI, the dispatch table and the fifteen verbs; the
+  rules moved to flat siblings — `gamedata` (content lookup), `runstate`
+  (`RunError` + `Run`), `rooms` (a room from a node, and the hand for it),
+  `acceptance` (the deterministic sensor), `events` (choices and their effects),
+  `rewards` (offers, chest draws, removal, badges) and `serialize` (the client's
+  payloads). Imports run one way and `run.py` re-exports every name it moved, so
+  nothing that reached into it before has to change. No behaviour change: the
+  same tests pass, none edited.
+- CI now lints `tools/` alongside `scripts/` and `tests/`, and checks that the
+  committed `docs/scenes.html` matches `app/scene.js` — it was generated to
+  `/tmp`, so the gallery had drifted a composer rewrite behind the client.
 - The design system's default flipped from paper to stone-and-ember; the paper
   palette is now the light theme, with every recorded contrast decision intact.
 - The map climbs. It used to run left-to-right, which read as a flowchart.
