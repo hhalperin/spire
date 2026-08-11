@@ -34,6 +34,61 @@ jobs:
         # checks that `claude plugin validate` performs, runnable without the CLI.
         run: python -m pytest tests/ -q
 
+  client:
+    # The MCP server and the client it serves. Separate from `test` because the
+    # Python engine must stay green on a machine with no Rust at all — that is
+    # the whole point of the server owning no game state.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+
+      - name: Bundle the client
+        run: node tools/build-app.mjs
+
+      - name: The bundle must not have grown a network dependency
+        # The ui:// resource declares an empty CSP allowlist. That is only
+        # honest if the document really is self-contained, so check it here
+        # rather than discovering it in someone's Claude Desktop.
+        run: |
+          if grep -qE 'src="http|href="http|url\(http|fonts\.(googleapis|gstatic)|cdn\.' \
+               server/assets/app.html; then
+            echo "app.html references an external origin; the CSP allowlist is a lie."
+            exit 1
+          fi
+          grep -q 'data:font/woff2;base64,' server/assets/app.html
+
+      - name: The bundle must be committed in sync with app/
+        # A stale server/assets/app.html means the binary serves one client while
+        # the repo shows another.
+        run: git diff --exit-code -- server/assets/app.html
+
+      - name: Clippy
+        run: cargo clippy --manifest-path server/Cargo.toml --all-targets -- -D warnings
+
+      - name: Test (cargo)
+        run: cargo test --manifest-path server/Cargo.toml
+
+      - name: Build the server
+        run: cargo build --release --manifest-path server/Cargo.toml
+
+      - name: Protocol tests over real stdio
+        run: |
+          python -m pip install --upgrade pip pytest
+          python -m pytest tests/test_mcp_server.py -q
+
   pre-commit:
     runs-on: ubuntu-latest
     steps:

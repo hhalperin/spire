@@ -1,0 +1,64 @@
+#!/bin/sh
+# Launcher for the spire MCP server.
+#
+# Claude Code starts this from .mcp.json. It has to work on a machine that has
+# just installed the plugin, so it tries, in order:
+#
+#   1. $SPIRE_MCP_BIN            — an explicit override
+#   2. server/dist/<os>-<arch>/  — a release artifact fetched by CI
+#   3. server/target/release/    — a local `cargo build --release`
+#   4. cargo run --release       — build it now (slow once, then cached)
+#
+# Anything printed on stdout is protocol traffic, so every diagnostic here goes
+# to stderr. A stray echo is a parse error at the other end of the pipe.
+
+set -eu
+
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+server_dir=$(dirname "$here")
+
+if [ -n "${SPIRE_MCP_BIN:-}" ] && [ -x "${SPIRE_MCP_BIN}" ]; then
+  exec "${SPIRE_MCP_BIN}" "$@"
+fi
+
+case "$(uname -s)" in
+  Darwin) os=macos ;;
+  Linux)  os=linux ;;
+  *)      os=unknown ;;
+esac
+case "$(uname -m)" in
+  arm64|aarch64) arch=arm64 ;;
+  x86_64|amd64)  arch=x64 ;;
+  *)             arch=unknown ;;
+esac
+
+prebuilt="${server_dir}/dist/${os}-${arch}/spire-mcp"
+if [ -x "$prebuilt" ]; then
+  exec "$prebuilt" "$@"
+fi
+
+built="${server_dir}/target/release/spire-mcp"
+if [ -x "$built" ]; then
+  exec "$built" "$@"
+fi
+
+if command -v cargo >/dev/null 2>&1; then
+  echo "spire: no prebuilt binary for ${os}-${arch}; building from source (one time)…" >&2
+  cargo build --release --quiet --manifest-path "${server_dir}/Cargo.toml" >&2
+  exec "$built" "$@"
+fi
+
+cat >&2 <<'EOF'
+spire: cannot start the MCP server.
+
+No prebuilt binary was found and cargo is not on PATH. Either install Rust
+(https://rustup.rs) and run:
+
+    cargo build --release --manifest-path server/Cargo.toml
+
+or set SPIRE_MCP_BIN to a spire-mcp binary you already have.
+
+The rest of the plugin — /spire, /spire:map, /spire:campfire, /spire:shop and
+/spire:ascend — works without this server. Only the game client needs it.
+EOF
+exit 1

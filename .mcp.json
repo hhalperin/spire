@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "game": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/server/bin/spire-mcp",
+      "env": {
+        "SPIRE_PLUGIN_ROOT": "${CLAUDE_PLUGIN_ROOT}",
+        "SPIRE_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}"
+      }
+    }
+  }
+}
