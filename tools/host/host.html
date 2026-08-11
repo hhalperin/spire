@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Spire — MCP Apps demo host</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; background: #0a0a0a; color: #ddd;
+      font: 13px/1.5 ui-sans-serif, system-ui, sans-serif;
+      display: grid; grid-template-rows: auto 1fr; min-height: 100vh;
+    }
+    header {
+      display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+      padding: 8px 14px; border-bottom: 1px solid #262626; background: #101010;
+    }
+    header b { color: #f0a54a; }
+    .sp { margin-left: auto; }
+    select, button {
+      font: inherit; background: #1a1a1a; color: #ddd;
+      border: 1px solid #333; border-radius: 4px; padding: 4px 9px;
+    }
+    #frame-wrap { padding: 14px; display: grid; place-items: start center; }
+    iframe {
+      width: 100%; max-width: var(--w, 1080px); height: var(--h, 760px);
+      border: 1px solid #2a2a2a; border-radius: 10px; background: #0b0908;
+    }
+    #log {
+      position: fixed; right: 10px; bottom: 10px; width: 330px; max-height: 42vh;
+      overflow: auto; background: #0d0d0d; border: 1px solid #262626;
+      border-radius: 8px; padding: 8px 10px;
+      font: 11px/1.45 ui-monospace, monospace; color: #8a8a8a;
+    }
+    #log b { color: #7fb0d0; font-weight: 500; }
+    #log .err { color: #d76a5f; }
+  </style>
+</head>
+<body>
+  <header>
+    <span>MCP Apps host · <b>__SERVER_NAME__ __SERVER_VERSION__</b></span>
+    <span>repo: <code>__REPO__</code></span>
+    <span class="sp"></span>
+    <label>theme
+      <select id="theme">
+        <option value="dark">dark</option>
+        <option value="light">light</option>
+        <option value="">unset</option>
+      </select>
+    </label>
+    <label>size
+      <select id="size">
+        <option value="1080x760">wide 1080</option>
+        <option value="720x760">panel 720</option>
+        <option value="420x760">narrow 420</option>
+      </select>
+    </label>
+    <button id="reload">reload view</button>
+  </header>
+
+  <div id="frame-wrap">
+    <!-- Same sandbox a real host applies: scripts run, but the view cannot reach
+         the parent document, its storage, or the network. -->
+    <iframe id="view" src="/app.html" sandbox="allow-scripts"></iframe>
+  </div>
+
+  <div id="log" aria-label="protocol log"></div>
+
+  <script>
+    const view = document.getElementById('view');
+    const logEl = document.getElementById('log');
+    const themeSel = document.getElementById('theme');
+    const sizeSel = document.getElementById('size');
+
+    let theme = 'dark';
+
+    function log(kind, text, bad) {
+      const row = document.createElement('div');
+      if (bad) row.className = 'err';
+      row.innerHTML = `<b>${kind}</b> ${text}`;
+      logEl.prepend(row);
+      while (logEl.children.length > 60) logEl.lastChild.remove();
+    }
+
+    function hostContext() {
+      return {
+        theme: theme || null,
+        displayMode: 'inline',
+        containerDimensions: { width: view.clientWidth, maxHeight: view.clientHeight },
+        styles: {
+          variables: {
+            '--color-background-primary': 'light-dark(#ffffff, #171717)',
+            '--color-text-primary': 'light-dark(#171717, #fafafa)',
+          },
+        },
+      };
+    }
+
+    function reply(id, result) {
+      view.contentWindow.postMessage({ jsonrpc: '2.0', id, result }, '*');
+    }
+    function replyError(id, message) {
+      view.contentWindow.postMessage(
+        { jsonrpc: '2.0', id, error: { code: -32000, message } }, '*');
+    }
+    function notify(method, params) {
+      view.contentWindow.postMessage({ jsonrpc: '2.0', method, params }, '*');
+    }
+
+    window.addEventListener('message', async (event) => {
+      const msg = event.data;
+      if (!msg || msg.jsonrpc !== '2.0') return;
+
+      if (msg.method === 'ui/initialize') {
+        log('ui/initialize', msg.params.clientInfo.name);
+        reply(msg.id, {
+          protocolVersion: '2026-01-26',
+          hostCapabilities: { serverTools: { listChanged: false }, logging: {} },
+          hostContext: hostContext(),
+        });
+        return;
+      }
+
+      if (msg.method === 'tools/call') {
+        const { name, arguments: args } = msg.params;
+        log('tools/call', name + (args && Object.keys(args).length
+          ? ' ' + JSON.stringify(args) : ''));
+        try {
+          const res = await fetch('/rpc', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ name, arguments: args }),
+          });
+          const result = await res.json();
+          if (result.isError) log('  ->', 'refused', true);
+          reply(msg.id, result);
+          // A real host pushes the result at the view as well as answering the
+          // request, and the client has to tolerate both. Exercise that here.
+          notify('ui/notifications/tool-result', result);
+        } catch (err) {
+          replyError(msg.id, String(err));
+        }
+        return;
+      }
+
+      if (msg.method === 'ui/notifications/size-changed') {
+        return; // measured, not acted on — the harness fixes the frame size
+      }
+      if (msg.method === 'ui/notifications/initialized') {
+        log('initialized', 'view is live');
+        window.__spireHostReady = true;
+        return;
+      }
+      if (msg.method === 'ui/update-model-context') {
+        log('context', msg.params.content?.[0]?.text || '');
+        return;
+      }
+      if (msg.method === 'ui/message') {
+        log('message', msg.params.content?.text || '');
+        return;
+      }
+      if (msg.method === 'ui/request-display-mode') {
+        log('display-mode', msg.params.mode);
+        return;
+      }
+      if (msg.id !== undefined) replyError(msg.id, `unsupported method ${msg.method}`);
+    });
+
+    themeSel.addEventListener('change', () => {
+      theme = themeSel.value;
+      notify('ui/notifications/host-context-changed', { theme: theme || null });
+      log('context-changed', `theme=${theme || 'unset'}`);
+    });
+
+    sizeSel.addEventListener('change', () => {
+      const [w, h] = sizeSel.value.split('x');
+      document.documentElement.style.setProperty('--w', `${w}px`);
+      document.documentElement.style.setProperty('--h', `${h}px`);
+    });
+
+    document.getElementById('reload').addEventListener('click', () => {
+      window.__spireHostReady = false;
+      view.src = `/app.html?t=${Date.now()}`;
+    });
+  </script>
+</body>
+</html>
