@@ -12,7 +12,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use rmcp::model::{JsonObject, Meta, Tool};
+use rmcp::model::{JsonObject, MetaObject, Tool};
 use serde_json::{json, Value};
 
 /// The single UI resource. One app, many screens — `mcp-client.md` and
@@ -279,8 +279,8 @@ pub fn object_of(value: Value) -> JsonObject {
 }
 
 /// `_meta.ui` for a tool: which view renders it, and who may call it.
-fn ui_meta(visibility: &[&str]) -> Meta {
-    Meta(object_of(json!({
+fn ui_meta(visibility: &[&str]) -> MetaObject {
+    MetaObject(object_of(json!({
         "ui": {
             "resourceUri": APP_URI,
             "visibility": visibility,
@@ -301,23 +301,40 @@ pub fn to_rmcp(spec: &ToolSpec) -> Tool {
     tool
 }
 
-/// Tools the *model* may see. App-only tools stay callable over the UI bridge
-/// but never appear in the agent's toolkit.
-pub fn model_tools() -> Vec<Tool> {
+/// The tools this client should be offered.
+///
+/// `has_app` is whether the client declared `io.modelcontextprotocol/ui`.
+///
+/// The `["app"]` split exists so the model does not narrate every card play in a
+/// host that has a UI to click. It quietly assumed a UI is always there. It is
+/// not: MCP Apps is supported by Claude web and desktop, VS Code GitHub Copilot,
+/// Cursor and ChatGPT — and *not* by Claude Code, which is this plugin's primary
+/// host. There, `tools/list` returned eleven tools with no way to play a card,
+/// end a turn or read the hand, and `spire_clear_or_flee` refuses while progress
+/// is short of `clear_at`. A monster, elite or boss room could be entered and
+/// then only fled. That is most of the map.
+///
+/// So the filter is now a function of the client rather than a constant: a host
+/// that can render the app keeps the quiet toolkit, and a host that cannot gets
+/// the whole verb set, because a playable game beats a tidy tool list. This is
+/// the graceful degradation the extensions spec asks for — a UI-enhanced server
+/// still has to be useful to a client that cannot render the UI.
+pub fn tools_for(has_app: bool) -> Vec<Tool> {
     TOOLS
         .iter()
-        .filter(|t| t.visibility.contains(&"model"))
+        .filter(|t| !has_app || t.visibility.contains(&"model"))
         .map(to_rmcp)
         .collect()
 }
+
 
 /// `_meta.ui` for the resource itself.
 ///
 /// The CSP lists are empty because the bundle is genuinely self-contained —
 /// fonts are inlined as data URIs, there is no CDN, and nothing phones home.
 /// Under the spec's deny-by-default policy that is the strongest position.
-pub fn resource_meta() -> Meta {
-    Meta(object_of(json!({
+pub fn resource_meta() -> MetaObject {
+    MetaObject(object_of(json!({
         "ui": {
             "csp": {
                 "connectDomains": [],
@@ -343,13 +360,42 @@ mod tests {
         }
     }
 
+    const CLICK_TOOLS: [&str; 4] = [
+        "spire_play_card",
+        "spire_list_hand",
+        "spire_annotate_node",
+        "spire_end_turn",
+    ];
+
+    fn names_for(has_app: bool) -> Vec<String> {
+        tools_for(has_app).iter().map(|t| t.name.to_string()).collect()
+    }
+
     #[test]
-    fn card_play_and_annotation_are_hidden_from_the_model() {
-        let names: Vec<_> = model_tools().iter().map(|t| t.name.to_string()).collect();
-        for hidden in ["spire_play_card", "spire_list_hand", "spire_annotate_node", "spire_end_turn"] {
+    fn card_play_and_annotation_are_hidden_when_the_client_can_click_them() {
+        let names = names_for(true);
+        for hidden in CLICK_TOOLS {
             assert!(!names.contains(&hidden.to_string()), "{hidden} leaked to the model");
         }
         assert!(names.contains(&"spire_enter_node".to_string()));
+    }
+
+    /// The other half, and the one that was a bug rather than a preference.
+    ///
+    /// A host that cannot render the app has no way to click a card, so hiding
+    /// the click tools from it left a fight room with no verb that adds
+    /// progress and no `force` on `spire_clear_or_flee`. Entered, then only
+    /// fleeable — and monster, elite and boss are most of the map.
+    #[test]
+    fn every_verb_is_offered_when_the_client_cannot_render_the_app() {
+        let names = names_for(false);
+        for needed in CLICK_TOOLS {
+            assert!(
+                names.contains(&needed.to_string()),
+                "{needed} is missing, so this host cannot finish a fight room"
+            );
+        }
+        assert_eq!(names.len(), TOOLS.len(), "every tool should be offered");
     }
 
     #[test]

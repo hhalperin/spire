@@ -79,14 +79,20 @@ class Session:
         self.proc.stdin.write(json.dumps(payload) + "\n")
         self.proc.stdin.flush()
 
-    def initialize(self) -> dict:
+    def initialize(self, renders_app: bool = True) -> dict:
+        """Open the session, optionally as a host that cannot render the app.
+
+        `renders_app=False` is the Claude Code shape: a client that declares no
+        extensions at all. The tool surface it is offered differs, deliberately.
+        """
+        capabilities: dict = {}
+        if renders_app:
+            capabilities["extensions"] = {
+                "io.modelcontextprotocol/ui": {"mimeTypes": [APP_MIME]},
+            }
         result = self.request("initialize", {
             "protocolVersion": PROTOCOL_VERSION,
-            "capabilities": {
-                "extensions": {
-                    "io.modelcontextprotocol/ui": {"mimeTypes": [APP_MIME]},
-                },
-            },
+            "capabilities": capabilities,
             "clientInfo": {"name": "spire-tests", "version": "0"},
         })
         self.notify("notifications/initialized")
@@ -282,3 +288,70 @@ def test_badges_are_reported_over_the_protocol(session):
     payload = session.payload("spire_badges")
     assert payload["ok"] is True
     assert isinstance(payload["badges"], list)
+
+
+# --------------------------------------------------------------------------- #
+# hosts that cannot render the app
+# --------------------------------------------------------------------------- #
+
+@pytest.fixture
+def plain_session(tmp_path, monkeypatch):
+    """A session from a client that declares no extensions — the Claude Code shape."""
+    monkeypatch.setenv("SPIRE_TODAY", "2026-07-24")
+    deck.save(str(tmp_path), deck.skeleton(["defect"]))
+    live = Session(str(tmp_path))
+    live.initialize(renders_app=False)
+    yield live
+    live.close()
+
+
+def test_a_host_without_the_app_is_offered_every_verb(plain_session):
+    """The click tools are hidden to keep them out of an agent's transcript.
+
+    That is only right when the agent has a UI to click them in. MCP Apps is not
+    supported by Claude Code, so hiding them there left no way to play a card,
+    end a turn or read the hand.
+    """
+    names = {t["name"] for t in plain_session.request("tools/list", {})["result"]["tools"]}
+    for needed in ("spire_play_card", "spire_end_turn", "spire_list_hand", "spire_annotate_node"):
+        assert needed in names, f"{needed} is hidden from a host that cannot click it"
+
+
+def test_a_fight_room_can_be_cleared_without_the_app(plain_session):
+    """The bug, as a test: enter a fight and finish it using only listed tools.
+
+    `spire_clear_or_flee` refuses while progress is short of `clear_at`, and no
+    tool exposes `--force`. With the click tools hidden this room could be
+    entered and then only fled — and monster, elite and boss are most of the map.
+    Every call here goes through a tool the server actually offered.
+    """
+    offered = {t["name"] for t in plain_session.request("tools/list", {})["result"]["tools"]}
+
+    smap = plain_session.payload("spire_map_refresh")["map"]
+    fight = next(
+        n for n in smap["nodes"]
+        if n["row"] == 0 and (n["resolved"] or n["kind"]) in {"monster", "elite"}
+    )
+    room = plain_session.payload("spire_enter_node", {"node": fight["id"]})["room"]
+    assert "clear_at" in room, "expected a room that needs progress"
+
+    for _ in range(12):
+        assert "spire_list_hand" in offered
+        hand = plain_session.payload("spire_list_hand")
+        room = hand["room"]
+        if room["progress"] >= room["clear_at"]:
+            break
+        playable = next((c for c in hand["hand"] if c["playable"] and c["progress"] > 0), None)
+        if playable is None:
+            assert "spire_end_turn" in offered
+            plain_session.payload("spire_end_turn")
+            continue
+        assert "spire_play_card" in offered
+        plain_session.payload("spire_play_card", {"card": playable["id"]})
+
+    assert room["progress"] >= room["clear_at"], (
+        f"could not reach {room['clear_at']} progress with the offered tools"
+    )
+    cleared = plain_session.payload("spire_clear_or_flee", {"action": "clear"})
+    assert cleared["ok"] is True, cleared
+    assert cleared["state"]["floor"] == 1
